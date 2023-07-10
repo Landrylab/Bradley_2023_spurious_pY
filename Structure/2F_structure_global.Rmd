@@ -1,0 +1,126 @@
+---
+title: "Figure_2F"
+output: html_document
+---
+
+# GGplot font
+
+```{r}
+
+# https://stackoverflow.com/questions/27689222/changing-fonts-for-graphs-in-r
+
+library(extrafont)
+font_import()
+loadfonts()       #Register fonts for Windows bitmap output
+fonts() 
+
+```
+
+# Collect together all of the 'master' files for each kinase, which we will use to extract the global profile
+
+```{r}
+
+master_files <- list.files('') # List all files in a directory that contains the master file for each kinase
+master_files <- master_files[grep('3D_linear',master_files)]
+master_files <- master_files[-c(1,24)] # Remove master files for the two active pS/pT kinases 
+
+first_master <- read.csv(master_files[1])
+
+# Collect together all unique pY phosphosites from across all of the expressed kinases in this experiment
+
+master_master_file <- NULL
+
+for (i in 1:length(master_files)) {
+  
+  master_file <- read.csv(master_files[i])
+  colnames(master_file) <- colnames(first_master)
+  master_master_file <- rbind(master_master_file, master_file)
+  
+}
+
+master_file_global <- master_master_file
+
+# Unique global file
+
+master_file_global_unique <- master_file_global[!duplicated(master_file_global[,c(5,6)]),]
+
+# Remove sites that do not map to an AF2 model
+master_file_AF2_all <- master_file_global_unique[master_file_global_unique[,14] != 'no AF2',]
+
+```
+
+# Calculate the percentage of sites that belong to each category
+
+```{r}
+
+ordered <- unname(table(master_file_AF2_all[,13])[2]/sum(table(master_file_AF2_all[,13])))
+
+pfam <- length(which(master_file_AF2_all[21] != 'No domain'))/nrow(master_file_AF2_all)
+
+buried <- length(which(as.numeric(master_file_AF2_all[,10]) < 0.2))/nrow(master_file_AF2_all)
+
+destabilising <- length(which(as.numeric(master_file_AF2_all[,14]) > 2))/nrow(master_file_AF2_all)
+
+interface <- table(master_file_AF2_all[,22])[2]/sum(table(master_file_AF2_all[,22]))
+
+destabilising_int <- master_file_AF2_all[,c(29,33)]
+
+destabilising_int <- length(which(as.numeric(unlist(apply(destabilising_int,1,function(x) x[x!='na']))) > 2)) / nrow(master_file_AF2_all)
+
+master_file_AF2_spurious <- master_file_AF2_all[master_file_AF2_all[,9] == 'No',]
+proximal_1D <- length(which(master_file_AF2_spurious[,18] > 0)) / nrow(master_file_AF2_spurious)
+proximal_3D <- length(which(master_file_AF2_spurious[,17] < 8)) / nrow(master_file_AF2_spurious)
+
+```
+
+# Construct a data frame from this data
+
+```{r}
+
+label_vec <- c('ordered','pfam domain','buried','destabilising (intra)', 'interface', 'destabilising (inter)', 'cross-talk (1D)', 'cross-talk (3D)')
+feature_vec <- c(ordered,pfam,buried,destabilising,interface,destabilising_int,proximal_1D,proximal_3D)
+feature_vec <- feature_vec*100
+
+global_df <- data.frame(label_vec,feature_vec,stringsAsFactors = FALSE)
+colnames(global_df) <- c('Label','Feature')
+write.table(global_df,file='structural_profile_df.txt',quote=F,col.names=F,row.names=F)
+
+```
+
+# Prettier plot
+
+```{r}
+
+# Plot a simple barplot corresponding to the global structural profile of the spurious pY data
+
+global_df <- read.table('structural_profile_df.txt')
+colnames(global_df) <- global_df[1,]
+global_df <- global_df[-1,]
+global_df[,2] <- as.numeric(global_df[,2])
+global_df[,1] <- c('ordered','pfam domain','buried','destabilising (intra)', 'interface', 'destabilising (inter)', '1D proximal', '3D proximal')
+global_df$Label<- factor(global_df$Label, levels = rev(c('ordered','pfam domain','buried','destabilising (intra)', 'interface', 'destabilising (inter)', '1D proximal', '3D proximal')))
+
+p <- ggplot(global_df, aes(x=Label,y=Feature, fill=Label)) + geom_bar(stat='identity',width=0.5) + scale_fill_manual(values = rep(colors()[291],8),9)
+p <- p+ scale_x_discrete(labels= rev(c('ordered','pfam domain','buried', expression(Delta*Delta*'G > 2 (intra)'), 'interface', expression(Delta*Delta*'G > 2 (inter) '), '1D proximal', '3D proximal')))
+
+# Font
+p <- p+theme_bw()
+p <- p + theme(legend.position = "none")
+p <- p + theme(panel.border = element_blank())
+p <- p + ylab("% spurious pY") + xlab("") + ggtitle('')
+p <- p + coord_cartesian(ylim = c(0, 100))
+p <- p + theme(axis.text.x = element_text(vjust=0.56))
+p <- p + theme(axis.text.x = element_text(angle = 70))
+
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme(axis.text.x=element_text(size=9.65),axis.text.y=element_text(size=12.5),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=16,face="plain"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+
+ggsave(file='2F_structural_profile.pdf', plot=p, width=4.65, height=4.8)
+
+```
+
+
+
+
