@@ -1,0 +1,252 @@
+---
+title: "Figure_2E"
+output: html_document
+---
+
+# GGplot font
+
+```{r}
+
+# https://stackoverflow.com/questions/27689222/changing-fonts-for-graphs-in-r
+
+library(extrafont)
+
+font_import()
+loadfonts()       #Register fonts for Windows bitmap output
+fonts() 
+
+```
+
+# Retrieve the number of unique upregulated pY per kinase
+
+```{r}
+
+library(tidyverse)
+
+# read in list of kinase conditions (WT vs. dead), sorted in terms of the number of upregulated pY identified by mass spectrometry
+
+Y_kinase_sorted <- read.table('Y_kinase_sorted.txt',sep='\t')
+Y_kinase_sorted <- Y_kinase_sorted[,1]
+
+```
+
+# Load in the interaction data for the Leutert pS/pT sites
+
+```{r}
+
+leutert_pSpT_inter <- read.csv('Leutert_S2_pSpT_interactions.csv')
+
+# construct ggplot2 data frame (PDB+AF2+I3D)
+
+pSpT_int_col1 <- rep('pST \n(native)',nrow(leutert_pSpT_inter))
+pSpT_int_col2 <- rep('pST \n(native)',nrow(leutert_pSpT_inter))
+pSpT_int_col3 <- leutert_pSpT_inter[,3]
+pSpT_int_col4 <- leutert_pSpT_inter[,6]
+pSpT_int_col5 <- leutert_pSpT_inter[,11]
+
+pSpT_int_PDB_AF2 <- data.frame(pSpT_int_col1,pSpT_int_col2,pSpT_int_col3,pSpT_int_col4,pSpT_int_col5)
+pSpT_int_PDB_AF2 <- pSpT_int_PDB_AF2[!duplicated(pSpT_int_PDB_AF2),]
+
+# construct ggplot2 data frame (ECLAIR)
+
+pSpT_int_col1 <- rep('pST \n(native)',nrow(leutert_pSpT_inter))
+pSpT_int_col2 <- rep('pST \n(native)',nrow(leutert_pSpT_inter))
+pSpT_int_col3 <- leutert_pSpT_inter[,3]
+pSpT_int_col4 <- leutert_pSpT_inter[,6]
+pSpT_int_col5 <- leutert_pSpT_inter[,10]
+
+pSpT_int_ECLAIR <- data.frame(pSpT_int_col1,pSpT_int_col2,pSpT_int_col3,pSpT_int_col4,pSpT_int_col5)
+pSpT_int_ECLAIR <- pSpT_int_ECLAIR[!duplicated(pSpT_int_ECLAIR),]
+
+```
+
+# Plot the number of PDB/I3D interfaces 
+
+```{r}
+
+# Iterate through the 'master' files for each kinase and then use this to retrieve interaction data per pY and per kinase 
+
+library(viridis)
+library(clusterProfiler)
+
+PDB_interfaces_df_global <- NULL
+
+for (i in 1:length(Y_kinase_sorted)) {
+  
+  print(i)
+  
+  Y_kinase <- Y_kinase_sorted[i]
+  
+  # retrieve the name of the kinase
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
+  
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file <- read_csv(master_file_path)
+  master_file <- data.frame(master_file,stringsAsFactors = F)
+  
+  # protein accession
+  accession <- master_file$proteins
+  
+  #psite position
+  pos <- master_file$pos_tag
+    
+  Y_kinase_group <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[1])
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[2])
+  
+  # PDB/I3D (uniprot IDs for each interactor per pY)
+  
+  PDB_interfaces <- master_file$I3D_interactors
+  if(is.null(PDB_interfaces)) {PDB_interfaces <- master_file$I3D.interactors}
+  PDB_int_list <- lapply(strsplit(PDB_interfaces,split='/'), function(x) x[x != 'na']) 
+  
+  # AF2 (uniprot IDs for each interactor per pY)
+  
+  AF2_interfaces <- master_file$AF2_interactors
+  if(is.null(AF2_interfaces)) {AF2_interfaces <- master_file$AF2.interactors}
+  AF2_int_list <- lapply(strsplit(AF2_interfaces,split='/'), function(x) x[x != 'na']) 
+  AF2_int_list <- lapply(AF2_int_list, function(x) stringr::str_trim(x))
+  
+  # Convert the AF2-based interactors into UniProt accessions so that they ca be compared with the PDB/I3D interactors
+  AF2_int_list <- lapply(AF2_int_list, function(x) bitr(c('CDC28',x),fromType="GENENAME", toType=c("UNIPROT"), OrgDb="org.Sc.sgd.db")[,2]) #ID conversion; most will map successfully (ignore warnings for small number of IDs that do not map)
+  AF2_int_list <- lapply(AF2_int_list, function(x) x[x != 'P00546'])
+  
+  # Combine in such a way that the same interface is not counted twice
+  PDB_AF2_list <- mapply(c,PDB_int_list,AF2_int_list)
+  PDB_AF2_list <- lapply(PDB_AF2_list, function(x) stringr::str_trim(x))
+  PDB_interfaces <- rapply(PDB_AF2_list,function(x) length(unique(x)))
+  PDB_interfaces_df <- data.frame(rep(Y_kinase_tag,nrow(master_file)), Y_kinase_group, accession, pos, PDB_interfaces, stringsAsFactors = FALSE)
+  colnames(PDB_interfaces_df) <- c('Kinase','Interfaces')
+  
+  # Check that the number of accessions is equal to the length of the interface vector
+  if(length(accession) != length(PDB_interfaces)) {stop()}
+  if(length(pos) != length(PDB_interfaces)) {stop()}
+  
+  PDB_interfaces_df_global <- rbind(PDB_interfaces_df_global, PDB_interfaces_df)
+  
+}
+
+colnames(PDB_interfaces_df_global) <- c('Kinase','Group','Accession','Position','Interfaces')
+
+# Remove duplicate phosphosites (within groups)
+
+PDB_interfaces_df_global <- PDB_interfaces_df_global[!duplicated(PDB_interfaces_df_global[,c(2,3,4)]),]
+
+# Incorporate interaction data for the pSpT sites
+
+colnames(pSpT_int_PDB_AF2) <- colnames(PDB_interfaces_df_global)
+PDB_interfaces_df_global <- rbind(PDB_interfaces_df_global, pSpT_int_PDB_AF2)
+
+# Arrange the group names into the desired order
+
+PDB_interfaces_df_global$Group <- factor(PDB_interfaces_df_global$Group, levels = c('pY','pYd','vSRC','pST \n(native)'))
+
+## generate the ggplot
+
+library(gghalves)
+
+p <- ggplot(PDB_interfaces_df_global, aes(x=Group, y=Interfaces, fill = Group, colour=Group)) + geom_half_violin(color='black',lwd=0.50,width=1.0,scale='width') +  geom_half_point()
+p <- p + scale_fill_manual(values = c(rgb(49/255,104/255,142/255,128/255),rgb(53/255,183/255,121/255,128/255), rgb(253/255,231/255,37/255,128/255), rgb(147/255,112/255,219/255,128/255))) + 
+                             scale_colour_manual(values = c(rgb(49/255,104/255,142/255,128/255),rgb(53/255,183/255,121/255,128/255), rgb(253/255,231/255,37/255,128/255), rgb(147/255,112/255,219/255,128/255)))
+
+# Font
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+
+p <- p + ylab("No. of structural interfaces (per pY)") + xlab("") + ggtitle('')
+p <- p+theme(axis.text=element_text(size=11),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=11.0,face="plain"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.position = "none", panel.border = element_blank()) # axis.line = element_blank(), )
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA)))
+p <- p+ylim(c(0,8.0))
+p <- p+geom_text(data=data.frame(), aes(x=c(1:4), y=rep(7.8,4)), label=c(table(PDB_interfaces_df_global[,2])),col=colors()[190], fontface='plain', size=3.25, inherit.aes = FALSE)
+ggsave(file='Figure_2e_left.pdf', plot=p, width=3.25, height=4.75)
+
+```
+
+# Plot the number of interfaces predicted by Interactome INSIDER (per pY). N.B. their prediction algorithm is called 'ECLAIR'.
+
+```{r}
+
+library(viridis)
+
+# Iterate through the 'master' files for each kinase and then use this to retrieve interaction data per pY and per kinase 
+
+ECLAIR_interfaces_df_global <- NULL
+
+for (i in 1:length(Y_kinase_sorted)) {
+  
+  print(i)
+  
+  Y_kinase <- Y_kinase_sorted[i]
+  
+  # retrieve the name of the kinase
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
+  
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file <- read_csv(master_file_path)
+  master_file <- data.frame(master_file,stringsAsFactors = F)
+  
+  accession <- master_file$proteins
+  pos <- master_file$pos_tag
+    
+  Y_kinase_group <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[1])
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[2])
+  
+  # retrieve the number of predicted interfaces per phosphosite (Y) i.e. the 'ECLAIR' interfaces
+  ECLAIR_interfaces <- master_file$ECLAIR_int_no.
+  if(is.null(ECLAIR_interfaces)) {ECLAIR_interfaces <- master_file$ECLAIR.interactions}
+  
+  # Check that the number of accessions is equal to the length of the interface vector
+  if(length(accession) != length(ECLAIR_interfaces)) {stop()}
+  if(length(pos) != length(ECLAIR_interfaces)) {stop()}
+  
+  ECLAIR_interfaces_df <- data.frame(rep(Y_kinase_tag,nrow(master_file)), rep(Y_kinase_group,nrow(master_file)), accession, pos, ECLAIR_interfaces, stringsAsFactors = FALSE)
+  colnames(ECLAIR_interfaces_df) <- c('Kinase','Interfaces')
+  
+  ECLAIR_interfaces_df_global <- rbind(ECLAIR_interfaces_df_global, ECLAIR_interfaces_df)
+  
+}
+
+colnames(ECLAIR_interfaces_df_global) <- c('Kinase','Group','Accession','Position','Interfaces')
+
+# Remove duplicate phosphosites (within groups)
+
+ECLAIR_interfaces_df_global <- ECLAIR_interfaces_df_global[!duplicated(ECLAIR_interfaces_df_global[,c(2,3,4)]),]
+
+# Incorporate interaction data for the pSpT sites
+
+colnames(pSpT_int_ECLAIR) <- colnames(ECLAIR_interfaces_df_global)
+ECLAIR_interfaces_df_global <- rbind(ECLAIR_interfaces_df_global, pSpT_int_ECLAIR)
+
+# Arrange the group names into the desired order
+
+ECLAIR_interfaces_df_global$Group <- factor(ECLAIR_interfaces_df_global$Group, levels = c('pY','pYd','vSRC', 'pST \n(native)'))
+
+## generate the ggplot
+
+library(gghalves)
+
+p <- ggplot(ECLAIR_interfaces_df_global, aes(x=Group, y=Interfaces, fill = Group, colour=Group)) + geom_half_violin(color='black',lwd=0.50,width=1.0,scale='width') +  geom_half_point()
+p <- p + scale_fill_manual(values = c(rgb(49/255,104/255,142/255,128/255),rgb(53/255,183/255,121/255,128/255), rgb(253/255,231/255,37/255,128/255), rgb(147/255,112/255,219/255,128/255))) + 
+                             scale_colour_manual(values = c(rgb(49/255,104/255,142/255,128/255),rgb(53/255,183/255,121/255,128/255), rgb(253/255,231/255,37/255,128/255), rgb(147/255,112/255,219/255,128/255)))
+
+# Font
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+
+p <- p + ylab("No. of predicted interfaces (per pY)") + xlab("") + ggtitle('')
+p <- p+theme(axis.text=element_text(size=11),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=11.0,face="plain"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.position = "none", panel.border = element_blank()) # axis.line = element_blank(), )
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA)))
+p <- p+geom_text(data=data.frame(), aes(x=c(1:4), y=rep(202,4)), label=c(table(PDB_interfaces_df_global[,2])),col=colors()[190], fontface='plain', size=3.25, inherit.aes = FALSE)
+ggsave(file='Figure_2e_right.pdf', plot=p, width=3.25, height=4.75)
+
+```
+
+
+
