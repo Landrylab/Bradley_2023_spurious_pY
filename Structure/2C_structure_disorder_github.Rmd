@@ -1,0 +1,168 @@
+---
+title: "Figure_2C"
+output: html_document
+---
+
+# GGplot font
+
+```{r}
+
+# https://stackoverflow.com/questions/27689222/changing-fonts-for-graphs-in-r
+
+library(extrafont)
+
+font_import()
+loadfonts()       #Register fonts for Windows bitmap output
+fonts() 
+
+```
+
+# Retrieve unique upregulated pY per kinase
+
+```{r}
+
+library(tidyverse)
+
+# read in list of kinase conditions (WT vs. dead), sorted in terms of the number of upregulated pY identified by mass spectrometry
+
+Y_kinase_sorted <- read.table('Y_kinase_sorted.txt',sep='\t')
+Y_kinase_sorted <- Y_kinase_sorted[,1]
+
+```
+
+# For context, retrieve AF2-based order/disorder predictions for native pS/pT in the yeast proteome
+
+```{r}
+
+# Read in table of RSA and disorder values for the pS/pT reference phosphoproteome (Table S2) from Leutert et al., 2022.
+
+pSpT_rsa_disorder <- read.csv('Leutert_S2_pSpT_rsa_disorder.csv')
+
+# Take the smoothened RSA across 25 residues, which we use as a proxy for disorder prediction (Piovesan et al., 2022).
+
+pSpT_disorder25 <- pSpT_rsa_disorder[,9]
+
+```
+
+# Plot disorder per kinase
+
+```{r}
+
+# Iterate through the 'master' files for each kinase and then use this to retrieve order data per pY and per kinase
+
+library(viridis)
+
+# Initialise vectors
+
+kinase_vec <- NULL
+frac_vec <- NULL
+size_vec <- NULL
+group_vec <- NULL
+disorder_vec <- NULL
+order_vec <- NULL
+
+for (i in 1:length(Y_kinase_sorted)) {
+  
+  print(i)
+  
+  Y_kinase <- Y_kinase_sorted[i]
+  
+  # Retrieve the kinase gene symbol
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
+  
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file <- read_csv(master_file_path)
+  master_file <- data.frame(master_file,stringsAsFactors = F)
+  
+  # Extract the relevant columns
+  master_file <- master_file[!duplicated(master_file[,1:6]),]
+  
+  Y_kinase_group <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[1])
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[2])
+  
+  # Calculate the fraction of sites that map to ordered and disordered regions
+  master_file_disorder <- master_file$order.
+  master_file_disorder_table <- table(master_file_disorder)
+  master_file_order <-  master_file_disorder_table[names(master_file_disorder_table) == 'ordered']
+  master_file_disorder <-  master_file_disorder_table[names(master_file_disorder_table) == 'disordered']
+  if(length(master_file_disorder) == 0) {master_file_disorder <- 0}
+  master_file_disorder_frac <- unname(master_file_order / (master_file_order+master_file_disorder))
+  
+  # append data to vectors
+  kinase_vec <- c(kinase_vec, Y_kinase_tag)
+  group_vec <- c(group_vec, Y_kinase_group)
+  frac_vec <- c(frac_vec, master_file_disorder_frac)
+  size_vec <- c(size_vec, master_file_order+master_file_disorder)
+  order_vec <- c(order_vec, master_file_order)
+  disorder_vec <- c(disorder_vec, master_file_disorder)
+}
+
+size_vec <- unname(size_vec)
+disorder_df <- data.frame(kinase_vec, frac_vec, order_vec, disorder_vec, group_vec)
+disorder_df[,2] <- disorder_df[,2]*100
+colnames(disorder_df) <- c('Kinase','Frac','Order','Disorder','Group')
+
+# Extract sample sizes and disorder fractions for each group
+
+disorder_df_vSRC <- disorder_df[disorder_df[,5] == 'vSRC',]
+disorder_df_pYd <- disorder_df[disorder_df[,5] == 'pYd',]
+disorder_df_pY <- disorder_df[disorder_df[,5] == 'pY',]
+
+vSRC_num <- sum(disorder_df_vSRC[,3])+sum(disorder_df_vSRC[,4])
+pYd_num <- sum(disorder_df_pYd[,3])+sum(disorder_df_pYd[,4])
+pY_num <- sum(disorder_df_pY[,3])+sum(disorder_df_pY[,4])
+pST_num <- length(pSpT_disorder25)
+
+vSRC_frac <- sum(disorder_df_vSRC[,3])/vSRC_num
+pYd_frac <- sum(disorder_df_pYd[,3])/pYd_num
+pY_frac <- sum(disorder_df_pY[,3])/pY_num
+pST_frac <- length(which(pSpT_disorder25 < 0.581))/length(pSpT_disorder25)
+
+# construct the ggplot2 data frame
+
+col1 <- c('vSRC','pYd','pY','pST \n(native)')
+col2 <- c(vSRC_num,pYd_num,pY_num,pST_num)
+col3 <- c(vSRC_frac,pYd_frac,pY_frac,pST_frac)*100
+
+fig_1c_df <- data.frame(col1,col2,col3)
+names(fig_1c_df) <- c('Kinase','Sample','Order')
+
+# Reorder data frame
+
+fig_1c_df <- fig_1c_df[c(3,2,1,4),]
+
+# Correct the ordering of the groups
+
+fig_1c_df$Kinase <- factor(fig_1c_df$Kinase, levels = c('pY', 'pYd', 'vSRC','pST \n(native)'))
+
+# Generate the order/disorder bar plot
+
+p <- ggplot(fig_1c_df, aes(x=Kinase, y=Order, fill = Kinase, width=.75)) + geom_bar(color='black', lwd=1.05, stat='identity') + scale_fill_manual(values = c(rgb(49/255,104/255,142/255,128/255),rgb(53/255,183/255,121/255,128/255), rgb(253/255,231/255,37/255,128/255), rgb(147/255,112/255,219/255,128/255)))
+
+# Font
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))#+theme(legend.position="none")
+
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+
+p <- p + ylab("% ordered") + xlab("") + ggtitle('')
+p <- p+theme(axis.text=element_text(size=10.5),axis.title.x=element_text(size=16,face="plain"),axis.title.y=element_text(size=16,face="plain"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + scale_y_continuous(labels=c('0','','','','100'))
+p <- p + theme(axis.ticks.y = element_line(color = c("black", NA, NA, NA,"black")))
+p <- p+theme(axis.title.y = element_text(vjust=-7))
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA, NA)))
+p <- p + theme(legend.position = "none",panel.border = element_blank()) # axis.line = element_blank(), )
+
+# Legend
+
+p <- p+theme(legend.key.size = unit(0.5, 'cm'),legend.title = element_text(size=0), legend.text = element_text(size=8))
+
+# Text
+
+p <- p+geom_text(data=data.frame(), aes(x=c(1:4), y=rep(101,4)), label=c(fig_1c_df[,2]),col=colors()[190], fontface='plain', size=3.0, inherit.aes = FALSE)
+
+ggsave(file='2C_disorder.pdf', plot=p, width=3.5, height=4.0)
+
+```
+
