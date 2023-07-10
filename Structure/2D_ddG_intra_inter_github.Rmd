@@ -1,0 +1,316 @@
+---
+title: "Figure_2D"
+output: html_document
+---
+
+# GGplot font
+
+```{r}
+
+# https://stackoverflow.com/questions/27689222/changing-fonts-for-graphs-in-r
+
+library(extrafont)
+
+font_import()
+loadfonts()       #Register fonts for Windows bitmap output
+fonts() 
+
+```
+
+# Retrieve the number of unique upregulated pY per kinase
+
+```{r}
+
+library(tidyverse)
+
+# read in list of kinase conditions (WT vs. dead), sorted in terms of the number of upregulated pY identified by mass spectrometry
+
+Y_kinase_sorted <- read.table('Y_kinase_sorted.txt',sep='\t')
+Y_kinase_sorted <- Y_kinase_sorted[,1]
+
+```
+
+# Generate data frame of intra-molecular ddG values per kinase
+
+```{r}
+
+library(viridis)
+
+ddG_df_global <- NULL
+
+for (i in 1:length(Y_kinase_sorted)) {
+  
+  print(i)
+  
+  Y_kinase <- Y_kinase_sorted[i]
+  
+  # Retrieve the kinase gene symbol
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
+  
+  # Retrieve data from the master file that exists for each kinase
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file <- read_csv(master_file_path)
+  master_file <- data.frame(master_file,stringsAsFactors = F)
+  
+  # unique pY sites only
+  master_file <- master_file[!duplicated(master_file[,1:6]),]
+  
+  Y_kinase_group <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[1])
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[2])
+  
+  # Retrieve the (intra-molecular) ddG values
+  master_file_ddG <- master_file$ddG_intra
+  ddG_df <- data.frame(rep(Y_kinase_group,nrow(master_file)),rep(Y_kinase_tag,nrow(master_file)), master_file_ddG, stringsAsFactors = FALSE)
+  colnames(ddG_df) <- c('Group','Kinase','ddG')
+  
+  ddG_df_global <- rbind(ddG_df_global, ddG_df)
+  
+}
+
+# Remove values for which no AF2 model was available or that map to low confidence pY residues
+
+ddG_df_global <- ddG_df_global[!ddG_df_global[,3] == 'no AF2',]
+ddG_df_global <- ddG_df_global[!ddG_df_global[,3] == '0',]
+ddG_df_global$ddG <- as.numeric(ddG_df_global$ddG)
+
+# Parse the kinase names
+
+kin_name_default <- names(table(RSA_df_global$Kinase))
+kin_name_sorted <- rapply(strsplit(Y_kinase_sorted, split=' '), function(x) x[1])
+kin_name_sorted <- rapply(strsplit(kin_name_sorted, split='-'), function(x) x[2])
+
+# Manually order kinases on the basis of the number of upregulated pY that are destabilising
+ddG_df_global$Kinase <- factor(ddG_df_global$Kinase, levels = c('TNK1','FES','TEC','SYK','ABL2','BMX','ABL1','LCK','FYN',
+                                                                'FRK','SRC','LYN','MET','FGFR3','EPHA1','EPHB4','EPHA3',
+                                                                'MERTK','EPHB3','FGFR2','EPHB1','L452A','V394A','L317A',
+                                                            'V292A','L393A','V383A','vSRC','L360A','L451A','V329A','L491A','L435A','L308A','V281A'))
+
+```
+
+# Barplot of the number of destabilising pY per kinase (intra-molecular)
+
+```{r}
+
+library(viridis)
+
+kin_vec <- NULL
+destab_vec <- NULL
+group_vec <- NULL
+
+for (i in 1:length(Y_kinase_sorted)) {
+  
+  print(i)
+  
+  Y_kinase <- Y_kinase_sorted[i]
+  
+  # Retrieve the kinase gene symbol
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
+  
+  # Retrieve data from the master file that exists for each kinase
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file <- read_csv(master_file_path)
+  master_file <- data.frame(master_file,stringsAsFactors = F)
+  
+  # unique pY sites only
+  master_file <- master_file[!duplicated(master_file[,1:6]),]
+  
+  Y_kinase_group <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[1])
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[2])
+  
+  # Retrieve the ddG values
+  master_file_ddG <- master_file$ddG_intra
+  # Number that are destabilising at a threshold of ddG > 2
+  master_file_ddG_destab <- length(which(master_file$ddG_intra >= 2))
+  if(length(master_file_ddG_destab) == 0) {master_file_ddG_destab <- 0}
+  
+  kin_vec <- c(kin_vec, Y_kinase_tag)
+  destab_vec <- c(destab_vec, master_file_ddG_destab)
+  group_vec <- c(group_vec, Y_kinase_group)
+  
+}
+
+destab_df <- data.frame(group_vec,kin_vec,as.numeric(destab_vec),stringsAsFactors = FALSE)
+colnames(destab_df) <- c('Group','Kinase','frequency')
+
+# Manually order kinases on the basis of the number of upregulated pY that are destabilising
+destab_df$Kinase <- factor(destab_df$Kinase, levels = c('TNK1','FES','TEC','SYK','ABL2','BMX','ABL1','LCK','FYN',
+                                                                'FRK','SRC','LYN','MET','FGFR3','EPHA1','EPHB4','EPHA3',
+                                                                'MERTK','EPHB3','FGFR2','EPHB1','L452A','V394A','L317A',
+                                                            'V292A','L393A','V383A','vSRC','L360A','L451A','V329A','L491A','L435A','L308A','V281A'))
+
+
+sort_vec <- destab_df[,2]
+
+x <- c('TNK1','FES','TEC','SYK','ABL2','BMX','ABL1','LCK','FYN',
+                                                                'FRK','SRC','LYN','MET','FGFR3','EPHA1','EPHB4','EPHA3',
+                                                                'MERTK','EPHB3','FGFR2','EPHB1','L452A','V394A','L317A',
+                                                            'V292A','L393A','V383A','vSRC','L360A','L451A','V329A','L491A','L435A','L308A','V281A')
+
+sorted_vec <- disorder_df[match(x,sort_vec),3]
+
+######
+
+# Generate the bar plot
+
+p <- ggplot(destab_df, aes(x=Kinase, y=frequency, fill = Group, width=.75)) + geom_bar(color='black', lwd=1.05, stat='identity') + scale_fill_manual(values = c(rgb(49/255,104/255,142/255,128/255),rgb(53/255,183/255,121/255,128/255), rgb(253/255,231/255,37/255,128/255)))
+
+# Font
+p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))#+theme(legend.position="none")
+
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+
+p <- p + ylab("no. of destabilising pY") + xlab("") + ggtitle('')
+p <- p+theme(axis.text=element_text(size=5),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=11,face="plain"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p 
+
+# Legend
+
+p <- p+theme(legend.key.size = unit(0.5, 'cm'),legend.title = element_text(size=0), legend.text = element_text(size=8))
+p <- p+geom_text(data=data.frame(), aes(x=c(1:35), y=rep(600,35)), label=sorted_vec,col=colors()[190], fontface='plain', size=2.0, inherit.aes = FALSE)
+
+```
+
+# Barplot of the number of destabilising pY per kinase (inter-molecular)
+
+```{r}
+
+library(viridis)
+
+kin_vec <- NULL
+destab_vec <- NULL
+size_vec <- NULL
+group_vec <- NULL
+
+for (i in 1:length(Y_kinase_sorted)) {
+  
+  print(i)
+  
+  Y_kinase <- Y_kinase_sorted[i]
+  
+  # Retrieve the kinase gene symbol
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
+  
+  # Retrieve data from the master file that exists for each kinase
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file <- read_csv(master_file_path)
+  master_file <- data.frame(master_file,stringsAsFactors = F)
+  
+  # unique pY sites only
+  master_file <- master_file[!duplicated(master_file[,1:6]),]
+   
+  Y_kinase_group <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[1])
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_tag,split='-'), function(x) x[2])
+  
+  # Trivial difference in column names that arose for historical reasons
+  if (Y_kinase_group == 'pY') {
+    
+    I3D_ddG_max <- master_file$I3D.AC.ddG.max.
+    AF2_ddG_max <- master_file$AF2.AC.ddG.max.
+    
+  } else {
+  
+    I3D_ddG_max <- master_file$I3D_AC_ddG_max
+    AF2_ddG_max <- master_file$AF2_AC_ddG_max
+  
+  }
+  
+  # For each row, extract all real (non-NA) ddG values and then take the maximum ddG (inter-molecular) per row.
+  I3D_AF2_df <- data.frame(as.numeric(I3D_ddG_max),as.numeric(AF2_ddG_max))
+  I3D_AF2_df <- I3D_AF2_df[I3D_ddG_max != 'na' | AF2_ddG_max != 'na',]
+  max_AC_ddG_vec <- unname(apply(I3D_AF2_df,1, function(x) max(x,na.rm=T)))
+  size <- length(max_AC_ddG_vec)
+  
+  # For this kinase, the number of destabilising pY (inter-molecular), using a threshold of 2
+  destab <- length(which(max_AC_ddG_vec >=2))
+  
+  kin_vec <- c(kin_vec, Y_kinase_tag)
+  destab_vec <- c(destab_vec, destab)
+  size_vec <- c(size_vec, size)
+  group_vec <- c(group_vec, Y_kinase_group)
+  
+}
+
+destab_df_AC <- data.frame(group_vec,kin_vec,as.numeric(destab_vec),stringsAsFactors = FALSE)
+colnames(destab_df_AC) <- c('Group','Kinase','frequency')
+
+# Manually order kinases on the basis of the number of upregulated pY that are destabilising
+
+destab_df_AC$Kinase <- factor(destab_df_AC$Kinase, levels = c('TNK1','FES','TEC','SYK','ABL2','BMX','ABL1','LCK','FYN',
+                                                                'FRK','SRC','LYN','MET','FGFR3','EPHA1','EPHB4','EPHA3',
+                                                                'MERTK','EPHB3','FGFR2','EPHB1','L452A','V394A','L317A',
+                                                            'V292A','L393A','V383A','vSRC','L360A','L451A','V329A','L491A','L435A','L308A','V281A'))
+
+sort_vec <- table(destab_df_AC[,2])
+
+x <- c('TNK1','FES','TEC','SYK','ABL2','BMX','ABL1','LCK','FYN',
+                                                                'FRK','SRC','LYN','MET','FGFR3','EPHA1','EPHB4','EPHA3',
+                                                                'MERTK','EPHB3','FGFR2','EPHB1','L452A','V394A','L317A',
+                                                            'V292A','L393A','V383A','vSRC','L360A','L451A','V329A','L491A','L435A','L308A','V281A')
+
+sorted_vec <- sort_vec[match(x,names(sort_vec))]
+
+# Generate the bar plot (inter-molecular)
+
+p <- ggplot(destab_df_AC, aes(x=Kinase, y=frequency, fill = Group, width=.75)) + geom_bar(color='black', lwd=1.05, stat='identity') + scale_fill_manual(values = c(rgb(49/255,104/255,142/255,128/255),rgb(53/255,183/255,121/255,128/255), rgb(253/255,231/255,37/255,128/255)))
+
+# Font
+p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))#+theme(legend.position="none")
+
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+
+p <- p + ylab("no. of destabilising pY") + xlab("") + ggtitle('')
+p <- p+theme(axis.text=element_text(size=5),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=11,face="plain"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p+geom_text(data=data.frame(), aes(x=c(1:35), y=rep(65,35)), label=sorted_vec,col=colors()[190], fontface='plain', size=2.0, inherit.aes = FALSE)
+
+```
+
+## Do a facet wrap of the intra- and inter-molecular ddG barplots
+
+```{r}
+
+destab_df <- data.frame(destab_df,'Intra-molecular')
+colnames(destab_df) <- c('Group','Kinase','Frequency','Class')
+destab_df_AC <- data.frame(destab_df_AC,'Inter-molecular')
+colnames(destab_df_AC) <- c('Group','Kinase','Frequency','Class')
+
+destab_df_intra_inter <- rbind(destab_df,destab_df_AC)
+destab_df_intra_inter$Class <- factor(destab_df_intra_inter$Class, levels = c('Intra-molecular','Inter-molecular'))
+
+####
+
+library(ggplot2)
+
+p <- ggplot(destab_df_intra_inter, aes(x=Kinase, y=Frequency, fill = Group, width=.75)) + geom_bar(color='black', lwd=1.05, stat='identity') + scale_fill_manual(values = c(rgb(49/255,104/255,142/255,128/255),rgb(53/255,183/255,121/255,128/255), rgb(253/255,231/255,37/255,128/255)))
+
+p <- p+ggforce::facet_col(facets = vars(Class), scales = "free_y", space = "free")
+
+# Font
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))#+theme(legend.position="none")
+
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+
+p <- p+theme(legend.key.size = unit(0.5, 'cm'),legend.title = element_text(size=0), legend.text = element_text(size=9.5))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+
+p <- p + ylab("no. of destabilising pY (predicted)") + xlab("") + ggtitle('')
+p <- p+theme(axis.text.x=element_text(size=10),axis.text.y=element_text(size=11),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=14,face="plain"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(axis.text.x = element_text(angle = 30))
+p <- p + theme(axis.text.x = element_text(vjust = 0.75))
+p <- p 
+p <- p+theme(strip.text = element_text(size = 13, margin = margin(0.1,0,0.1,0, "cm")), strip.background = element_rect(colour = "black", size = 1.0))
+
+###
+
+ggsave(file='2D_intra_inter.pdf', plot=p, width=15, height=5.5)
+
+```
+
+
+
+
