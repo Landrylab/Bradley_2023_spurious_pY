@@ -1,0 +1,167 @@
+---
+title: "Figure_3e_3f"
+author: "David Bradley"
+date: "3/24/2022"
+output: html_document
+---
+
+# GGplot font
+
+```{r}
+
+# https://stackoverflow.com/questions/27689222/changing-fonts-for-graphs-in-r
+
+library(extrafont)
+
+font_import()
+loadfonts()       #Register fonts for Windows bitmap output
+fonts() 
+
+```
+
+# Retrieve number of unique upregulated pY per kinase
+
+```{r}
+
+library(tidyverse)
+
+# Go the directory containing all of the 'master' files for this paper. There should be one master spreadsheet per kinase.
+master_files <- list.files()
+
+Y_kinase_sorted <- rapply(strsplit(master_files, split='_'), function(x) x[1])
+
+# Remove the two active S/T kinases (IRAK4 and TLK2)
+Y_kinase_sorted <- Y_kinase_sorted[!Y_kinase_sorted %in% c('IRAK4','TLK2')]
+
+pY_vec <- NULL
+
+for (i in 1:length(Y_kinase_sorted)) {
+  
+  print(i)
+  
+  Y_kinase <- Y_kinase_sorted[i]
+  Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
+  
+  # If necessary, speciy the path containing the 'master' files
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file <- read_csv(master_file_path)
+  master_file <- data.frame(master_file,stringsAsFactors = F)
+  
+  # Unique phosphosites only
+  master_file <- unique(master_file[,1:6])
+  
+  # Number of unique pY per kinase
+  pY_len <- nrow(master_file)
+  pY_vec <- c(pY_vec, pY_len)
+  
+}
+
+names(pY_vec) <- Y_kinase_sorted
+
+```
+
+# Retrieve minimum fitness across condititons
+
+```{r}
+
+# Read in the fitness data (across kinases and across conditions)
+auc <- read.table('AUC_simps.tsv',sep='\t', head=TRUE, stringsAsFactors = FALSE) 
+auc <- auc[,-1]
+auc_names <- auc[,3]
+auc_names <- gsub('MER domain','MERTK domain',auc_names) # convert between synonymous IDs
+auc_names <- gsub('domain','',auc_names) # simplify names
+auc_names <- rapply(strsplit(auc_names, split=' '), function(x) x[length(x)])
+
+Y_kinase <- rapply(strsplit(Y_kinase_sorted, split='-'), function(x) x[2])
+
+# SRMS and EPHA2 do not seem to have any upregulated pY phosphosites
+
+Y_kinase <- c(Y_kinase, c('SRMS','EPHA2'))
+
+# Retrieve the minimum growth per kinase
+
+min_growth_vec <- NULL
+
+for (i in 1:length(Y_kinase)) {
+  
+  kinase <- Y_kinase[i]
+  
+  auc_kinase <- auc[auc_names %in% kinase,]
+  
+  min_growth <- min(auc_kinase[,16]) # Difference between WT and dead (mean)
+  
+  min_growth_vec <- c(min_growth_vec, min_growth)
+  
+}
+
+names(min_growth_vec) <- Y_kinase 
+
+pY_vec <- c(pY_vec, 0, 0)
+names(pY_vec)[37:38] <- c('SRMS','EPHA2')
+
+```
+
+## ggplot (one vSRC and one inactive)
+
+```{r}
+
+library(ggrepel)
+
+## As before but this time we have only one inactive kinase and one vSRC sequence (to ensure that the data analysed are somewhat independent)
+
+redundant_kinases <- c('pY-ABL2', 'pY-BMX', 'pY-FES', 'pY-SYK', 'pY-TEC', 'pY-TNK1', 'pYd-EPHA1', 'pYd-EPHA3', 'pYd-EPHB4', 'pYd-FGFR3', 'pYd-MET',
+                        'vSRC-L308A','vSRC-L317A','vSRC-L360A','vSRC-L393A','vSRC-L435A','vSRC-L451A','vSRC-L452A', 'vSRC-L491A', 'vSRC-V281A',
+                        'vSRC-V292A', 'vSRC-V329A', 'vSRC-V383A', 'vSRC-V394A', 'vSRC-vSRC', 'EPHA2')
+
+reg_df <- data.frame(pY_vec,min_growth_vec)
+
+# Filter out the redundant kinases
+reg_df <- reg_df[!rownames(reg_df) %in% redundant_kinases,]
+
+# Process the dataframe
+rownames(reg_df) <- rapply(strsplit(rownames(reg_df),split='-'), function(x) x[length(x)])
+colnames(reg_df) <- c('pY','Minimum')
+
+# Plot the regression using gglot
+p <- ggplot(reg_df, aes(x=pY, y=Minimum)) + geom_point() + geom_smooth(method=lm, se=FALSE)
+p <- p+geom_label_repel(aes(label = rownames(reg_df)))
+p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=11),axis.title.x=element_text(size=13,face="bold"),axis.title.y=element_text(size=13,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(legend.position="none")
+p <- p + ylab("minimum fitness (wt-dead)") + xlab("no. of upregulated pY") + ggtitle('')
+p <- p + geom_text(x = 2420, y = -0.65, label = 'r = -0.71', check_overlap = TRUE, size=5.0)
+
+ggsave(file='Figure_3e.pdf', plot=p, width=4.25, height=3.75)
+
+```
+
+## ggplot (vSRC mutants only, minimum growth across conditions)
+
+```{r}
+
+library(ggrepel)
+
+## Construct the data frame
+reg_df <- data.frame(pY_vec,min_growth_vec)
+
+# vSRC mutants only
+reg_df <- reg_df[grep('vSRC',rownames(reg_df)),]
+
+# Remove one of the redundant copies of the WT vSRC
+reg_df <- reg_df[-1,]
+rownames(reg_df) <- rapply(strsplit(rownames(reg_df),split='-'), function(x) x[length(x)])
+colnames(reg_df) <- c('pY','Minimum')
+
+# Plot the regression using ggplot 
+p <- ggplot(reg_df, aes(x=pY, y=Minimum)) + geom_point() + geom_smooth(method=lm, se=FALSE, col='red')
+p <- p+geom_label_repel(aes(label = rownames(reg_df)), color='black')
+p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=11),axis.title.x=element_text(size=13,face="bold"),axis.title.y=element_text(size=13,face="bold"),plot.title=element_text(size=15.5,face='bold'))
+p <- p+theme(legend.position="none")
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + ylab("minimum fitness (wt-dead)") + xlab("no. of upregulated pY") + ggtitle('vSRC mutants')
+p <- p + geom_text(x = 2370, y = -0.65, label = 'r = -0.89', check_overlap = TRUE, size=4.5)
+
+ggsave(file='Figure_3e.pdf', plot=p, width=4.25, height=3.75)
+
+```
