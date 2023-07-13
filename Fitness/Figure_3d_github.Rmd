@@ -1,0 +1,152 @@
+---
+title: "Figure_3d_github"
+author: "David Bradley"
+date: '2023-07-13'
+output: html_document
+---
+
+# GGplot font
+
+```{r}
+
+# https://stackoverflow.com/questions/27689222/changing-fonts-for-graphs-in-r
+
+library(extrafont)
+font_import()
+loadfonts()       #Register fonts for Windows bitmap output
+fonts() 
+
+```
+
+# Retrieve the number of unique upregulated pY per kinase
+
+```{r}
+
+library(tidyverse)
+
+# read in list of kinase conditions (WT vs. dead), sorted in terms of the number of upregulated pY identified by mass spectrometry
+
+Y_kinase_sorted <- read.table('Y_kinase_sorted.txt',sep=' ')
+Y_kinase_sorted <- Y_kinase_sorted[,1]
+
+```
+
+# Load and process the data for the selection coefficients
+
+```{r}
+
+library(dplyr)
+
+### Load in the data for the selection coefficients
+
+sel_coef <- read.table('selection_coefficients.tsv')
+
+# remove dead and uninduced kinases
+
+sel_coef <- sel_coef[sel_coef[,2] != 'dead',]
+sel_coef <- sel_coef[sel_coef[,4] != 'uninduced',]
+
+# extract unique IDs for each kinase and then reformat the dataframe
+
+kinase_id <- paste(sel_coef[,1],sel_coef[,2],sep='_')
+sel_coef[,1] <- kinase_id
+sel_coef <- sel_coef[,-2]
+colnames(sel_coef) <- c('Kinase','Replicate','Induction','selection_coefficient')
+
+# take mean with respect to each unique kinase
+
+kin_sf <- sel_coef %>% group_by(Kinase) %>% summarise(mean = mean(selection_coefficient), n = n())
+
+```
+
+# Load and process the data for the fitness screens
+
+```{r}
+
+# Retrieve minimum fitness across condititons
+
+auc <- read.table('AUC_simps.tsv',sep='\t', head=TRUE, stringsAsFactors = FALSE) 
+auc <- auc[,-1]
+auc_names <- auc[,3]
+auc_names <- gsub('MER domain','MERTK domain',auc_names) # convert synonyms
+auc_names <- gsub('domain','',auc_names) # process IDs
+auc_names <- rapply(strsplit(auc_names, split=' '), function(x) x[length(x)])
+Y_kinase <- rapply(strsplit(Y_kinase_sorted, split='-'), function(x) x[2])
+
+# SRMS and EPHA2 do not have any upregulated pY phosphosites
+
+Y_kinase <- c(Y_kinase, c('SRMS','EPHA2'))
+
+min_growth_vec <- NULL
+
+for (i in 1:length(Y_kinase)) {
+  
+  kinase <- Y_kinase[i]
+  
+  auc_kinase <- auc[auc_names %in% kinase,]
+  
+  min_growth <- min(auc_kinase[,16])
+  
+  min_growth_vec <- c(min_growth_vec, min_growth)
+  
+}
+
+names(min_growth_vec) <- Y_kinase 
+
+```
+
+# Compare the selection coefficients (from the competition assay) with the WT-dead AUCs (from the fitness screens)
+
+```{r}
+
+sc_kin_id <- as.data.frame(kin_sf)[,1]
+auc_kin_id <- names(min_growth_vec)
+
+# standardise the IDs
+
+sc_kin_id_1 <- rapply(strsplit(sc_kin_id,split='_'), function(x) x[1])
+sc_kin_id_2 <- rapply(strsplit(sc_kin_id,split='_'), function(x) x[2])
+sc_kin_id_new <- c(sc_kin_id_1[sc_kin_id_2=='wt'],sc_kin_id_2[sc_kin_id_2 !='wt'])
+
+# Manually move one element (vSRC) to retain original order
+sc_kin_id_new <- c(sc_kin_id_new,'vSRC')
+sc_kin_id_new <- sc_kin_id_new[-13]
+
+# numerical variables
+
+sc_data <- as.data.frame(kin_sf)[,2]
+auc_data <- min_growth_vec[match(sc_kin_id_new,auc_kin_id)]
+
+#
+
+fitness_df <- data.frame(auc_data,sc_data)
+
+```
+
+# Generate a ggplot of the regression
+
+```{r}
+
+library(ggrepel)
+library(ggtext)
+
+# Mini df for kinases that I would like to highlight
+
+fitness_df_mini <- fitness_df[rownames(fitness_df) %in% c('ABL1','ABL2','FRK','FYN','LCK','SRC','L451A','L317A','vSRC','V383A','L452A','V394A'),]
+fitness_labels <- rownames(fitness_df_mini)
+
+## As before but this time we have only one inactive kinase and one vSRC sequene
+
+p <- ggplot(fitness_df, aes(x=auc_data, y=sc_data)) + geom_point() + geom_smooth(method=lm, se=FALSE,col='black')
+#p <- p+geom_label_repel(aes(label = rownames(reg_df)), size=2.9, color='black', label.size=0.3, label.r=0.15)
+p <- p+geom_label_repel(data=fitness_df_mini,aes(label = fitness_labels))#, size=2.9, color='black', label.size=0.25, label.r=0.15)
+p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=11),axis.title.x=element_text(size=13,face="bold"),axis.title.y=element_text(size=13,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(legend.position="none")
+p <- p + ylab("selection coefficient (s)") + xlab("minimum fitness (wt-dead)") + ggtitle('')
+p <- p+geom_richtext(x=-5.7, y=-0.00155, label='r<sub>s</sub> = 0.65',size=4.5,fontface='plain',col='black',label.color = NA)
+
+ggsave(file='selection_coefficient_vs_minimum_fitness_unique_figure.pdf', plot=p, width=4.35, height=3.65)
+
+```
+
