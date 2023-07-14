@@ -76,27 +76,27 @@ colnames(volc_df) <- c('Kinase','Group','AUC','pvalue')
 
 ```{r}
 
-p <- ggplot(volc_df, aes(x=AUC,y=pvalue,color=Group)) + geom_point(size=0.85)
-p <- p + scale_color_manual(values = c(rgb(49/255,104/255,142/255,128/255),rgb(53/255,183/255,121/255,128/255), rgb(253/255,231/255,37/255,128/255)))
+p <- ggplot(volc_df, aes(x=AUC,y=pvalue,color=Group)) + geom_point(size=0.9)
+p <- p + scale_color_manual(values = c(rgb(49/255,104/255,142/255,100/255),rgb(53/255,183/255,121/255,156/255), rgb(253/255,231/255,37/255,156/255)))
 p <- p + theme_bw() + theme(text=element_text(family="Ubuntu Light"))
 p <- p + theme(panel.border = element_blank())
-p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -0.175, yend = 3),colour=colors()[308], lwd=0.325, lty=2)
-p <- p + geom_segment(aes(x = -0.175, y = 3, xend = -0.175, yend = 6.0),colour=colors()[308], lwd=0.325, lty=2)
-p <- p + geom_segment(aes(x = -6.25, y = 6, xend = -0.175, yend = 6),colour=colors()[308], lwd=0.325, lty=2)
-p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -6.25, yend = 6.0),colour=colors()[308], lwd=0.325, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -0.175, yend = 3),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -0.175, y = 3, xend = -0.175, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 6, xend = -0.175, yend = 6),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -6.25, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
 p <- p + xlab('wt-dead (AUC)')+ylab('significance \n (-log10(P))')
 p <- p+theme(axis.text=element_text(size=8.5),axis.title.x=element_text(size=9.5,face="bold"),axis.title.y=element_text(size=13.0,face="bold"),plot.title=element_text(size=18,face='bold'))
 p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
 p <- p+theme(legend.key.size = unit(0.4, 'cm'),
         legend.key.height = unit(0.4, 'cm'), 
         legend.key.width = unit(0.4, 'cm'), 
-        legend.title = element_text(size=10), 
+        legend.title = element_text(size=10, face='bold'), 
         legend.text = element_text(size=9))
 
 # Add text
 p <- p+geom_text(label='p<0.001 \n 22 kinases \n 762 kinase-conditions',x=-6.15,y=3.75, inherit.aes = F, check_overlap = T, size=3.75, hjust=0)
 
-ggsave(file='fitness_volcano.pdf', plot=p, width=4.75, height=3.125)
+ggsave(file='fitness_volcano.pdf', plot=p, width=4.9, height=3.125)
 
 ```
 
