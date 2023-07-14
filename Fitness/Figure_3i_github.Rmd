@@ -1,0 +1,169 @@
+---
+title: "Figure_3i"
+author: "David Bradley"
+date: "6/20/2022"
+output: html_document
+---
+
+# EPHB1 stoichiometry
+
+```{r}
+
+# Read in the data
+
+alex_h_stoichiometry <- read.csv('data_stoichiometry_export2.csv', stringsAsFactors = F)
+
+# Use a 0.01 q-value threshold for significance of the regression that is used to predict stoichiometry
+
+alex_h_stoichiometry <- alex_h_stoichiometry[as.numeric(alex_h_stoichiometry[,1]) < 0.01,]
+
+# WT kinase only (not interested in the kinase-dead mutant)
+
+alex_h_stoichiometry_vSRC <- alex_h_stoichiometry[grep('EPHB1_wt',alex_h_stoichiometry[,4]),]
+
+# phosphopeptides only (not interested in the non-phospo peptides)
+
+alex_h_stoichiometry_vSRC <- alex_h_stoichiometry_vSRC[grep('Y\\(ph\\)',alex_h_stoichiometry_vSRC[,3]),]
+
+# omit sites with 0 stoichiometry (these correspond to phospho-peptide with non-0 stoichiometry in the other kinase)
+
+alex_h_stoichiometry_vSRC <- alex_h_stoichiometry_vSRC[alex_h_stoichiometry_vSRC[,8] > 0,]
+
+# average stoichiometry
+
+summary(alex_h_stoichiometry_vSRC[,8])
+
+# unique psites (around 122 at at a threshold of 0.01)
+ 
+unique(alex_h_stoichiometry_vSRC[,3])
+
+```
+
+# remove redundant phosphopeptides and take the median stoichiometry (per phosphopeptide)
+
+```{r}
+
+acc <- alex_h_stoichiometry_vSRC[,6]
+phospho_peptide <- alex_h_stoichiometry_vSRC[,3]
+acc_phospho_peptide <- paste(acc,'-',phospho_peptide,sep='')
+acc_phospho_peptide <- unique(acc_phospho_peptide)
+
+#
+
+stoi_data_df <- NULL
+
+for (i in 1:length(acc_phospho_peptide)) {
+  
+  acc <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[1])
+  pep <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[2])
+  
+  stoi_data <- alex_h_stoichiometry_vSRC[alex_h_stoichiometry_vSRC[,6] %in% acc & alex_h_stoichiometry_vSRC[,3] %in% pep,]
+  stoi_data[,8] <- median(stoi_data[,8])
+  
+  # Just take the first row as they all have the same stoichiometries
+  
+  stoi_data <- stoi_data[1,]
+  stoi_data_df <- rbind(stoi_data_df,stoi_data)
+  
+}
+
+ephb1_stoi_data_df <- stoi_data_df
+
+```
+
+# vSRC stoichiometry
+
+```{r}
+
+# Read in the data
+
+alex_h_stoichiometry <- read.csv('data_stoichiometry_export2.csv', stringsAsFactors = F)
+
+# Use a 0.01 q-value threshold for significance of the regression that is used to predict stoichiometry
+
+alex_h_stoichiometry <- alex_h_stoichiometry[as.numeric(alex_h_stoichiometry[,1]) < 0.01,]
+
+# WT kinase only (not interested in the kinase-dead mutant)
+
+alex_h_stoichiometry_vSRC <- alex_h_stoichiometry[grep('vSRC_wt',alex_h_stoichiometry[,4]),]
+
+# phosphopeptides only (not interested in the non-phospo peptides)
+
+alex_h_stoichiometry_vSRC <- alex_h_stoichiometry_vSRC[grep('Y\\(ph\\)',alex_h_stoichiometry_vSRC[,3]),]
+
+# omit sites with 0 stoichiometry (These correspond to phospho-peptide with non-0 stoichiometry in the other kinase)
+
+alex_h_stoichiometry_vSRC <- alex_h_stoichiometry_vSRC[alex_h_stoichiometry_vSRC[,8] > 0,]
+
+# average stoichiometry
+
+summary(alex_h_stoichiometry_vSRC[,8])
+
+# unique psites (around 116 at at a threshold of 0.01)
+ 
+unique(alex_h_stoichiometry_vSRC[,3])
+
+```
+
+# remove redundant phosphopeptides and take the median stoichiometry (per phosphopeptide)
+
+```{r}
+
+acc <- alex_h_stoichiometry_vSRC[,6]
+phospho_peptide <- alex_h_stoichiometry_vSRC[,3]
+acc_phospho_peptide <- paste(acc,'-',phospho_peptide,sep='')
+acc_phospho_peptide <- unique(acc_phospho_peptide)
+
+#####
+
+stoi_data_df <- NULL
+
+for (i in 1:length(acc_phospho_peptide)) {
+  
+  acc <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[1])
+  pep <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[2])
+  
+  stoi_data <- alex_h_stoichiometry_vSRC[alex_h_stoichiometry_vSRC[,6] %in% acc & alex_h_stoichiometry_vSRC[,3] %in% pep,]
+  stoi_data[,8] <- median(stoi_data[,8])
+  
+  # Just take the first row as they all have the same stoichiometries
+  
+  stoi_data <- stoi_data[1,]
+  stoi_data_df <- rbind(stoi_data_df,stoi_data)
+  
+}
+
+vsrc_stoi_data_df <- stoi_data_df
+
+```
+
+# Generate a simple boxplot of the EPHB1 and vSRC stoichiometries
+
+```{r}
+
+library(ggplot2)
+
+col1 <- c(rep('EPHB1',nrow(ephb1_stoi_data_df)),rep('vSRC',nrow(vsrc_stoi_data_df)))
+col2 <- c(ephb1_stoi_data_df[,8],vsrc_stoi_data_df[,8])
+
+ephb1_vsrc_df <- data.frame(col1,col2)
+colnames(ephb1_vsrc_df) <- c('Kinase','Stoichiometry')
+
+# Reorder the kinases
+
+ephb1_vsrc_df$Kinase <- factor(ephb1_vsrc_df$Kinase, levels = c('vSRC','EPHB1'))
+ephb1_vsrc_df[,2] <- ephb1_vsrc_df[,2]*100
+
+p <- ggplot(ephb1_vsrc_df,aes(x=Kinase,y=Stoichiometry, fill=Kinase)) + geom_boxplot(notch=T,width=0.5,lwd=1.5)
+p <- p+scale_fill_manual(values=c(rgb(253/255,231/255,37/255,128/255),rgb(49/255,104/255,142/255,128/255)))
+p <- p+xlab('')+ylab('Stoichiometry')
+p <- p + theme_bw()+ theme(text=element_text(family="Ubuntu Light"))
+p <- p + theme(legend.position = "none")
+p <- p+coord_cartesian(ylim = c(0, 100))
+p <- p + theme(panel.border = element_blank())
+p <- p+theme(axis.text.x=element_text(size=16, face='bold'),axis.text.y=element_text(size=15.0),axis.title.x=element_text(size=12.5,face="bold"),axis.title.y=element_text(size=23,face="bold",vjust=1),plot.title=element_text(size=11.5,face='bold'))
+
+ggsave(file='Figure_3i.pdf', plot=p, width=3.575, height=5.0)
+
+```
+
