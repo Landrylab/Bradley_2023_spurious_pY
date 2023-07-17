@@ -1,0 +1,273 @@
+---
+title: "Figure_4c"
+author: "David Bradley"
+date: '2023-07-17'
+output: html_document
+---
+
+# For each of the human kinases with a (relatively) strong phosphorylation signal, retrieve the KSRs from the Bachman paper
+# and then check to see if they are orthologues or not of the sc proteins that are phosphorylated by that kinase
+
+# We will start by using the Src kinase as an example
+
+```{r}
+
+# Retrieve the kinase-substrate relationship (KSR) data from ProtMapper (Bachman et al., 2022, bioRxiv)
+
+KSRs <- read.csv('export.csv')
+
+# filter for KSRs that have a 'belief' score (i.e. confidence score) greater than 0.75 (quite a conservative threshold)
+
+KSRs <- KSRs[KSRs[,11] > 0.75,]
+
+# We will use Src as our initial example
+
+SRC_KSRs <- KSRs[which(KSRs[,4] == 'SRC'),]
+SRC_substrate_ids_uniprot <- unique(SRC_KSRs[,6])
+SRC_substrate_ids_uniprot <- rapply(strsplit(SRC_substrate_ids_uniprot,split='-'), function(x) x[1]) #Remove isoform info (cannot be mapped to Ensembl)
+
+# Map to Ensembl using 'bitr' function from ClusterProfiler
+
+library(clusterProfiler)
+library(org.Hs.eg.db)
+uniprot_ensembl <- bitr(SRC_substrate_ids_uniprot, fromType="UNIPROT", toType=c("ENSEMBL"), OrgDb="org.Hs.eg.db")
+SRC_substrate_ids_ensembl <- uniprot_ensembl[,2]
+
+# Extract all of the unique Src substrates in yeast
+
+SRC_master <- read.csv(paste('pY-SRC_master.csv',sep='')) # Locat the 'master' file for SRC kinase
+SRC_yeast_pY_ensembl <- unique(SRC_master$ensembl_IDs) # Extract Ensembl IDs
+SRC_yeast_pY_ensembl <- SRC_yeast_pY_ensembl #ensemble(SRC_yeast_pY_ensembl,1,7)
+SRC_yeast_pY_ensembl <- SRC_yeast_pY_ensembl[!is.na(SRC_yeast_pY_ensembl)]
+
+# Cross reference this with the orthology table for phosphorylated proteins
+
+sc_hs_df_phospho <- read.table('sc_hs_df_phospho_relaxed.txt') # NB this 'relaxed' table includes proteins that may be native pY because they were detected once as a native pY
+
+# subset the orthology table only for the substrates of Src
+
+sc_hs_df_phospho_sc_SRC <- sc_hs_df_phospho[sc_hs_df_phospho[,1] %in% SRC_yeast_pY_ensembl,]
+
+# subset further for only those phosphorylated substrates that have human orthologues that are also phosphorylated by SRC
+# i.e. number of cases where both yeast and human proteins are known to be phosphrylated by Src
+
+sc_hs_df_phospho_sc_SRC_hs_SRC <- sc_hs_df_phospho_sc_SRC[sc_hs_df_phospho_sc_SRC[,2] %in% SRC_substrate_ids_ensembl,]
+
+# calculate fractions
+
+# Number of yeast Src susbstrates that have at least one human orthologue that is phosphorylated by SRC
+SRC_sc_over_hs <- length(unique(sc_hs_df_phospho_sc_SRC_hs_SRC[,1]))/length(unique(SRC_yeast_pY_ensembl)) 
+
+# Number of human_substrates that have at least one yeast ortholog that is spuriously phosphorylated
+SRC_hs_over_sc <- length(unique(sc_hs_df_phospho_sc_SRC_hs_SRC[,2]))/length(unique(SRC_substrate_ids_ensembl)) 
+
+```
+
+# Iterate across all human kinases with appreciable specificity (we cannot do this for vSRC for obvious reasons)
+
+```{r}
+
+master_files <- list.files('') # Path to the directory containing all of the master files for each kinase
+active_kinases <- c('ABL1','ABL2','FYN','EPHB4','EPHA3','LCK','LYN','SRC','EPHB1','EPHB3','FGFR2','MERTK','ABL1','FRK','FYN','LCK','LYN','SRC','EPHB1','EPHB3','FGFR2','MERTK')
+
+# Only 5 of the kinases have a non-negligible sample-size of known substrates in ProtMapper:
+active_kinases <- c('ABL1','FYN','LCK','LYN','SRC')
+
+# orthology table for all pY-phosphorylated yeast proteins detected in this study
+
+sc_hs_df_phospho <- read.table('sc_hs_df_phospho_relaxed.txt') # NB this 'relaxed' table includes proteins that may be native pY because they were detected once as a native pY
+
+sc_frac_vec <- NULL # conserved KSRs as a fraction of total substrates in yeast
+hs_frac_vec <- NULL # conserved KSRs as a fraction of total substrates in human
+hs_ortho_num_vec <- NULL # number of known substrates in human (i.e. the sample size)
+
+for (i in 1:length(active_kinases)) {
+  
+    active_kinase <- active_kinases[i]
+    
+    grep_tag <- paste('-',active_kinase,'_',sep='') 
+    
+    SRC_KSRs <- KSRs[which(KSRs[,4] == active_kinase),] #N.B. the code refers to 'SRC' but the data in fact corresponds to whatever is the 'active kinase' for this iteration of the for loop.
+    
+    if(nrow(SRC_KSRs) == 0) {stop('no kinase KSRs?')}
+    
+    SRC_substrate_ids_uniprot <- unique(SRC_KSRs[,6])
+    SRC_substrate_ids_uniprot <- rapply(strsplit(SRC_substrate_ids_uniprot,split='-'), function(x) x[1]) # Remove isoform info (cannot be mapped to Ensembl)
+    
+    # Map to Ensembl
+    
+    library(clusterProfiler)
+    library(org.Hs.eg.db)
+    uniprot_ensembl <- bitr(SRC_substrate_ids_uniprot, fromType="UNIPROT", toType=c("ENSEMBL"), OrgDb="org.Hs.eg.db")
+    SRC_substrate_ids_ensembl <- uniprot_ensembl[,2]
+    
+    # Count the number of known human substrates
+    hs_ortho_num_vec <- c(hs_ortho_num_vec,length(SRC_substrate_ids_ensembl))
+    
+    # Extract all of the unique substrates for the kinase
+    
+    grep_dex <- grep(grep_tag,master_files) # index of the master file corresponding to the kinase of interest, found by grepping the kinase name against the list of master files 
+    
+    if(length(grep_dex) != 1) {stop('Cannot find the master file')}
+    
+    # Read in the master file corresponding to the active kinase in question
+    SRC_master <- read.csv(paste(master_files[grep_dex],sep=''))
+    SRC_yeast_pY_ensembl <- unique(SRC_master[,7])
+    SRC_yeast_pY_ensembl <- SRC_yeast_pY_ensembl #substr(SRC_yeast_pY_ensembl,1,7)
+    SRC_yeast_pY_ensembl <- SRC_yeast_pY_ensembl[!is.na(SRC_yeast_pY_ensembl)]
+    
+    # subset the orthology table only for the substrates of the active kinase in question
+    
+    sc_hs_df_phospho_sc_SRC <- sc_hs_df_phospho[sc_hs_df_phospho[,1] %in% SRC_yeast_pY_ensembl,]
+    
+    # subset further for only those phosphorylated substrates that have human orthologues that are also phosphorylated by SRC
+    # i.e. number of cases where both yeast and human proteins are known to be phosphrylated by Src
+    
+    sc_hs_df_phospho_sc_SRC_hs_SRC <- sc_hs_df_phospho_sc_SRC[sc_hs_df_phospho_sc_SRC[,2] %in% SRC_substrate_ids_ensembl,]
+    
+    # calculate fractions
+    
+    # Number of yeast Src susbstrates that have at least one human orthologue that is phosphorylated by SRC
+    SRC_sc_over_hs <- length(unique(sc_hs_df_phospho_sc_SRC_hs_SRC[,1]))/length(unique(SRC_yeast_pY_ensembl)) 
+    
+    # Number of human_substrates that have at least one yeast ortholog that is spuriously phosphorylated
+    SRC_hs_over_sc <- length(unique(sc_hs_df_phospho_sc_SRC_hs_SRC[,2]))/length(unique(SRC_substrate_ids_ensembl)) 
+      
+    # append fractions to the vector
+    
+    sc_frac_vec <- c(sc_frac_vec,SRC_sc_over_hs)
+    hs_frac_vec <- c(hs_frac_vec,SRC_hs_over_sc)
+    
+}
+
+names(sc_frac_vec) <- active_kinases
+names(hs_frac_vec) <- active_kinases
+names(hs_ortho_num_vec) <- active_kinases
+
+```
+
+# Generate a heatmap of the data using ComplexHeatmaps
+
+```{r}
+
+library(ComplexHeatmap)
+library('RColorBrewer')
+library(circlize)
+library(viridis)
+
+
+# conserved KSRs as a fraction of total substrates in yeast
+
+pdf(file = "KSR_yeast.pdf",   # The directory you want to save the file in
+    width = 5, # The width of the plot in inches
+    height = 1.5) 
+
+Heatmap(t(sc_frac_vec),cluster_columns=F,cluster_rows=F,col=colorRamp2(c(0, 0.25), c('white',colors()[499])), 
+        row_names_side='left',
+       # heatmap_width=0.5,
+        width=unit(8,'cm'),
+       # heatmap_height=2,
+        height=unit(0.7,'cm'),
+        border=TRUE,
+        row_title='',
+        row_title_gp=gpar(fontsize = 13),
+        row_names_rot=0,
+        row_names_centered=TRUE,
+        row_names_gp=gpar(fontsize = 6.0),
+        
+     #   Cells with no data are colored in white
+            cell_fun = function(j, i, x, y, w, h, col) { # add text to each grid
+              grid.text(round(sc_frac_vec[j]*100,2), x, y,gp=gpar(fontsize = 6.0, col='black'))},
+            
+        show_column_names=TRUE,
+        #bottom_annotation = HeatmapAnnotation(
+        #text = anno_text(colnames(top_ptm_df), rot = 0, offset = unit(0.75, "npc"), just = "right"),
+        #annotation_height = max_text_width(colnames(top_ptm_df))),
+        column_title='',
+        column_title_side='bottom',
+        column_title_gp=gpar(fontsize = 13),
+        column_names_gp=gpar(fontsize=7.0),
+        #col_names_rot=90,
+        rect_gp=(gpar(lwd=0.9, fontfamily='mono')), 
+       
+   heatmap_legend_param = list(
+    at = c(0.0,0.25),
+    labels = c("0", "25"),
+    title = "Sc-pY \n % conservation",
+    legend_height = unit(1.15, "cm"),
+    legend_width = unit(1, "cm"),
+    border='black',
+    lwd=1.7,
+    title_position = "leftcenter-rot",
+    title_gp = gpar(fontsize = 5.5, fontface='bold')
+))
+
+dev.off()
+
+# save (3.00 x 8.00; landscape)
+
+# conserved KSRs as a fraction of total substrates in human
+
+# Here is the annotation for the total number of substrates
+
+pdf(file = "KSR_human.pdf",   # The directory you want to save the file in
+    width = 5, # The width of the plot in inches
+    height = 1.5) 
+
+ha1 = HeatmapAnnotation(
+    dist1 = anno_barplot(hs_ortho_num_vec
+        , 
+        bar_width = 1, 
+        gp = gpar(col = "white", fill = "black"), 
+        border = FALSE,
+        gap = unit(1, "points"),
+        axis=TRUE,
+        height = unit(2, "cm")
+    ), show_annotation_name = FALSE)
+
+Heatmap(t(hs_frac_vec),cluster_columns=F,cluster_rows=F,col=colorRamp2(c(0, 0.25), c('white',colors()[617])), 
+        row_names_side='left',
+       # heatmap_width=0.5,
+        width=unit(8,'cm'),
+       # heatmap_height=2,
+        height=unit(0.7,'cm'),
+        border=TRUE,
+        row_title='',
+        row_title_gp=gpar(fontsize = 13),
+        row_names_rot=0,
+        row_names_centered=TRUE,
+        row_names_gp=gpar(fontsize = 6.0),
+        
+        # Cells with no data are colored in white
+            cell_fun = function(j, i, x, y, w, h, col) { # add text to each grid
+              grid.text(round(hs_frac_vec[j]*100,2), x, y,gp=gpar(fontsize = 6.0, col='black'))},
+            
+        show_column_names=TRUE,
+        #bottom_annotation = HeatmapAnnotation(
+        #text = anno_text(colnames(top_ptm_df), rot = 0, offset = unit(0.75, "npc"), just = "right"),
+        #annotation_height = max_text_width(colnames(top_ptm_df))),
+        column_title='',
+        column_title_side='bottom',
+        column_title_gp=gpar(fontsize = 13),
+        column_names_gp=gpar(fontsize=7.0),
+        #col_names_rot=90,
+        rect_gp=(gpar(lwd=0.9, fontfamily='mono')), 
+    top_annotation = ha1,   
+  heatmap_legend_param = list(
+    at = c(0.0,0.25),
+    labels = c("0", "25"),
+    title = "Hs-pY \n % conservation",
+    legend_height = unit(1.15, "cm"),
+    legend_width = unit(1, "cm"),
+    border='black',
+    lwd=1.7,
+    title_position = "leftcenter-rot",
+    title_gp = gpar(fontsize = 6.5, fontface='bold')
+))
+
+dev.off()
+
+# save (3.00 x 8.00; landscape)
+
+```
+
