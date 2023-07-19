@@ -1,0 +1,360 @@
+---
+title: "Figure_4d"
+author: "David Bradley"
+date: '2023-07-18'
+output: html_document
+---
+
+# Check whether the Pfam domains are conserved between the yeast substrates and the human substrates
+
+```{r} 
+
+# Load fonts
+
+# https://stackoverflow.com/questions/27689222/changing-fonts-for-graphs-in-r
+
+library(extrafont)
+font_import()
+loadfonts()       #Register fonts for Windows bitmap output
+fonts() 
+
+```
+
+# Retrieve the yeast Pfams (remove native yeast pY)
+
+```{r}
+
+master_files <- list.files() # Directory of 'master' files for each kinase
+
+# Loop through all of the master files and extract the pfam annotations
+
+accession_pos_pfam_vec <- NULL
+
+for (i in 1:length(master_files)) {
+  
+  if (i == 1) {next}
+  if (i == 24) {next}
+  
+  master_file <- read.csv(paste('',master_files[i],sep='')) # Specify the correct path to the master file
+  accession <- master_file$protein
+  systematic_id <- master_file$ensembl_IDs
+  pos <- master_file$pos_tag
+  abundance <- master_file$paxdb_abundance
+  pfam <- master_file$pfam_domain
+      
+  accession_pos_pfam <- paste(accession,';',systematic_id,';',pos,';',abundance,';',pfam,sep='')
+  
+  accession_pos_pfam_vec <- c(accession_pos_pfam_vec,accession_pos_pfam)
+  
+}
+
+accession_pos_pfam_vec <- unique(accession_pos_pfam_vec)
+accession_pos_pfam_vec <- accession_pos_pfam_vec[-grep('No domain',accession_pos_pfam_vec)] # At this point we filter out any pY that do not map to any pfam domains
+
+# S. cerevisiae data frame
+
+col1 <- rapply(strsplit(accession_pos_pfam_vec,split=';'), function(x)x[1]) # accession
+col2 <- rapply(strsplit(accession_pos_pfam_vec,split=';'), function(x)x[2]) # ensembl ID
+
+col3 <- rapply(strsplit(accession_pos_pfam_vec,split=';'), function(x)x[3]) # position
+col3 <- readr::parse_number(col3)
+
+col4 <- rapply(strsplit(accession_pos_pfam_vec,split=';'), function(x)x[4]) # abundane
+col5 <- rapply(strsplit(accession_pos_pfam_vec,split=';'), function(x)x[5]) # pfam
+
+sc_pfam_df <- data.frame(col1,col2,col3,col4,col5)
+accession_pos_all <- paste(sc_pfam_df[,1],sc_pfam_df[,2],sep='_')
+
+### Remove any potential native sites
+
+native_sites <- read.table('native_all_Lanz_Leutert_union.txt')
+native_sites <- unname(unlist(native_sites))
+
+ensembl_pos_all <- paste(col2,col3,sep='_')
+sc_pfam_df <- sc_pfam_df[!ensembl_pos_all %in% native_sites,] # Remove any pY site that has been detected at least once as an endogenous site
+
+colnames(sc_pfam_df) <- c('accession','systematic_id','position','abundance','pfam_domain')
+
+####
+
+# Calculate relative frequencies for the pfam domains and sort from least frequent to the most frequent
+
+sc_pfam_tag <- sc_pfam_df[,5]
+sc_pfam <- rapply(strsplit(sc_pfam_tag,split=':'), function(x)x[1])
+table(sc_pfam)
+sc_pfam_sort <- (sort(table(sc_pfam))/sum(table(sc_pfam)))*100
+
+```
+
+# Retrieve the human pfams
+
+```{r}
+
+ # As a reminder, for the 'high confidence' pY we use all pY that are supported by at least 5 sources in PSP
+
+hs_pY_high_conf <- read.table('human_psp_5.txt',head=T)
+hs_pY_high_conf <- hs_pY_high_conf[,c(3,5,10)]
+hs_pY_high_conf[,2] <- readr::parse_number(hs_pY_high_conf[,2])
+hs_pY_high_conf[,3] <- toupper(hs_pY_high_conf[,3])
+hs_pY_high_conf[,1] <- rapply(strsplit(hs_pY_high_conf[,1],split='-'), function(x) x[1]) # Remove the uniprot isoform info as this cannot be mapped to Ensembl IDs
+
+colnames(hs_pY_high_conf) <- c('accession','position','window')
+
+pfam_human <- read.table('9606.tsv') # Data for human pfam domains
+colnames(pfam_human) <- c('Accession','Alignment_start','Alignment_end','Envelope_start','Envelope_end',
+                                'HMM_acc','HMM_name','Type','HMM_start','HMM_end','HMM_length','Bit_score',
+                                'E-value','Clan')
+
+human_pfam_domains <- unique(pfam_human$HMM_name)
+
+# Extract pfam annotations for each one of the high-confidence human pY phosphosites
+
+pos_pfam_map_vec <- NULL
+
+for (j in 1:nrow(hs_pY_high_conf)) {
+    
+    print(j)
+  
+    accession <- hs_pY_high_conf[j,1]
+    pos_num <- hs_pY_high_conf[j,2]
+      
+      # Family or domain only (i.e. no coiled coil, repeat, motif, disordered, etc.)
+      pfam_human <- pfam_human[pfam_human[,8] %in% c('Domain','Family'),]
+      
+      # Retrieve domains from protein of interest
+      phospho_pfam <- pfam_human[pfam_human[,1] %in% accession,]
+      
+      if (nrow(phospho_pfam) == 0) {pos_pfam_map_vec <- c(pos_pfam_map_vec, 'No domain'); next}
+      
+      # Map phosphosite position
+      
+      for (l in 1:nrow(phospho_pfam)) {
+        
+        pfam_id <- phospho_pfam[l,6]
+        name <- phospho_pfam[l,7]
+        type <- phospho_pfam[l,8]
+        clan <- phospho_pfam[l,14]
+        
+        start <- phospho_pfam[l,4]
+        end <- phospho_pfam[l,5]
+        
+        pfam_tag <- paste(type,pfam_id,name,sep='-')
+        if(length(pfam_tag) > 1) {stop()}
+        if (pos_num >= start & pos_num <= end) {pos_pfam_map_vec <- c(pos_pfam_map_vec, pfam_tag); break}
+        
+        # Here we assign 'No domain' if none of the pY sites map to one of the pfam domains (i.e. they all annotate outside of the domains)
+        if (l == nrow(phospho_pfam) & length(pos_pfam_map_vec) < j)  {pos_pfam_map_vec <- c(pos_pfam_map_vec, 'No domain'); next}
+      }
+      
+    }
+
+human_pfam_df <- data.frame(hs_pY_high_conf,pos_pfam_map_vec)
+human_pfam_df <- human_pfam_df[human_pfam_df[,4] != 'No domain',] # Remove pY that do nt map to any domain
+colnames(human_pfam_df) <- c('accession','position','window','pfam')
+
+# ID map to ensembl
+
+library(clusterProfiler)
+library(org.Hs.eg.db)
+hs_pY_uniprot_ensembl <- bitr(human_pfam_df[,1], fromType="UNIPROT", toType=c("ENSEMBL"), OrgDb="org.Hs.eg.db")
+human_pfam_df_ensembl <- data.frame(hs_pY_uniprot_ensembl[match(human_pfam_df[,1],hs_pY_uniprot_ensembl[,1]),2],human_pfam_df)
+
+# Read in the PaxDB table
+
+human_paxdb <- read.table('Human_stoichiometry_PaxDB_integrated.tsv',sep='\t',stringsAsFactors = FALSE)
+human_paxdb[,2] <- gsub('9606.','',human_paxdb[,2])
+
+# Read in the UniProt mapping table (between UniProt and PaxDB)
+
+uniprot_map <- read.table('full_uniprot_2_paxdb.04.2015.tsv', stringsAsFactors = FALSE)
+uniprot_map <- uniprot_map[uniprot_map[,1] == '9606',]
+human_ensembl <- gsub('9606.','',human_paxdb[,2])
+ensembl_uniprot <- uniprot_map[uniprot_map[,3] %in% human_ensembl,c(2,3)]
+ensembl_uniprot[,1] <- rapply(strsplit(ensembl_uniprot[,1],split='\\|'), function(x) x[1])
+rownames(ensembl_uniprot) <- NULL
+
+## Assign abundances to each ID
+
+human_pfam_df_ensembl <- data.frame(ensembl_uniprot[match(human_pfam_df[,1],ensembl_uniprot[,1]),2],human_pfam_df) # From the paxdb mapping table, get ensembl IDs for each human pY
+colnames(human_pfam_df_ensembl) <- c('Ensembl','accession','position','window','pfam')
+
+# obtain abundance
+
+human_pfam_df_ensembl_abun <- data.frame(human_pfam_df_ensembl,human_paxdb[match(human_pfam_df_ensembl[,1],human_paxdb[,2]),3])
+colnames(human_pfam_df_ensembl_abun) <- c('ensembl','accession','position','window','pfam','abundance')
+
+```
+
+# Human and Sc (keep all domains found more at least 5 times) 
+
+```{r}
+
+# Hs (extract domain frequencies for all pfam domain with at least 5 unique pY in human)
+
+human_pfam_df_ensembl_abun[,5] <- gsub('PK_Tyr_Ser-Thr','Pkinase',human_pfam_df_ensembl_abun[,5]) # Treat these as the same domain
+hs_pfam_tab <-  sort(table(rapply(strsplit(human_pfam_df_ensembl_abun[,5],split='-'),function(x)x[3])))
+hs_pfam_tab_rel <- hs_pfam_tab/sum(hs_pfam_tab)
+hs_pfam_tab_rel <- hs_pfam_tab_rel*100
+
+hs_pfam_5 <- names(hs_pfam_tab[hs_pfam_tab >= 5])
+hs_pfam_tab_rel_5 <- hs_pfam_tab_rel[names(hs_pfam_tab_rel) %in% hs_pfam_5]
+
+# Sc (extract domain frequencies for all pfam domain with at least 5 unique pY in yeast)
+sc_pfam_tab <- sort(table(rapply(strsplit(sc_pfam_df[,5],split=':'), function(x) x[1])))
+sc_pfam_tab_rel <- (sc_pfam_tab)/sum(sc_pfam_tab)
+sc_pfam_tab_rel <- sc_pfam_tab_rel*100
+
+sc_pfam_5 <- names(sc_pfam_tab[sc_pfam_tab >= 5])
+sc_pfam_tab_rel_5 <- sc_pfam_tab_rel[names(sc_pfam_tab_rel) %in% sc_pfam_5]
+
+```
+
+# Find domain frequencies for the domains of interest
+
+```{r}
+
+#### Domains commonly phosphorylated in S. cerevisiae
+
+hs_vec <- NULL
+sc_vec <- NULL
+
+for(i in 1:length(names(sc_pfam_tab_rel_5))) {
+  
+  sc_freq <- sc_pfam_tab_rel_5[i]
+  dom_nom <- names(sc_pfam_tab_rel_5)[i]
+  hs_freq <- hs_pfam_tab_rel[names(hs_pfam_tab_rel) %in% dom_nom]
+  if (length(hs_freq) == 0) {hs_freq <- 0}
+  
+  sc_vec <- c(sc_vec,sc_freq)
+  hs_vec <- c(hs_vec,hs_freq)
+  
+}
+
+hs_sc_freq <- data.frame(sc_vec,hs_vec)
+hs_sc_freq <- data.frame(rownames(hs_sc_freq),hs_sc_freq)
+rownames(hs_sc_freq) <- NULL
+
+# Remove from this table any domain that simply does not exist in human
+
+hs_sc_freq_1 <- hs_sc_freq[hs_sc_freq[,1] %in% human_pfam_domains,]
+colnames(hs_sc_freq_1) <- c('pfam','sc_freq','hs_freq')
+
+### Domains commonly phosphorylated in H. sapiens
+
+hs_vec <- NULL
+sc_vec <- NULL
+
+for(i in 1:length(names(hs_pfam_tab_rel_5))) {
+  
+  hs_freq <- hs_pfam_tab_rel_5[i]
+  dom_nom <- names(hs_pfam_tab_rel_5)[i]
+  sc_freq <- sc_pfam_tab_rel[names(sc_pfam_tab_rel) %in% dom_nom]
+  if (length(sc_freq) == 0) {sc_freq <- 0}
+  
+  sc_vec <- c(sc_vec,sc_freq)
+  hs_vec <- c(hs_vec,hs_freq)
+  
+}
+
+hs_sc_freq <- data.frame(sc_vec,hs_vec)
+hs_sc_freq <- data.frame(rownames(hs_sc_freq),hs_sc_freq)
+rownames(hs_sc_freq) <- NULL
+
+# Remove any pfam domain that simply does not exist in yeast
+
+pfam_Scerevisiae <- read.table('559292.tsv')
+colnames(pfam_Scerevisiae) <- c('Accession','Alignment_start','Alignment_end','Envelope_start','Envelope_end',
+                                'HMM_acc','HMM_name','Type','HMM_start','HMM_end','HMM_length','Bit_score',
+                                'E-value','Clan')
+
+yeast_pfam_domains <- unique(pfam_Scerevisiae[,7])
+
+hs_sc_freq_2 <- hs_sc_freq[hs_sc_freq[,1] %in% yeast_pfam_domains,]
+colnames(hs_sc_freq_2) <- c('pfam','sc_freq','hs_freq')
+
+## Combine the data for the pfam domains commonly found to be phosphorylated in human and those that are commonly phosphoryated in yeast
+
+hs_sc_freq_combi <- rbind(hs_sc_freq_1,hs_sc_freq_2)
+hs_sc_freq_combi <- hs_sc_freq_combi[!duplicated(hs_sc_freq_combi[,c(1,2,3)]),] # Remove duplicate entries
+
+```
+
+# Extract abunances before we do the ggplot
+
+```{r}
+
+sc_dom_names <- rapply(strsplit(sc_pfam_df[,5],split=':'), function(x) x[1])
+hs_dom_names <- rapply(strsplit(human_pfam_df_ensembl_abun[,5],split='-'), function(x) x[3])
+
+abun_vec <- NULL
+
+# Abundances are taken in effect as the median abundance across all proteins where a unique pY maps to the domain of interest;
+
+for (i in 1:nrow(hs_sc_freq_combi)) {
+  
+  dom_nom <- hs_sc_freq_combi[i,1]
+  
+  sc_abun_median <- median(as.numeric(sc_pfam_df[sc_dom_names %in% dom_nom,3]),na.rm=T)
+  
+  hs_abun_median <- median(human_pfam_df_ensembl_abun[hs_dom_names %in% dom_nom,6],na.rm=T)
+  
+  if(is.na(hs_abun_median)) {hs_abun_median <- sc_abun_median}
+  if(is.na(sc_abun_median)) {sc_abun_median <- hs_abun_median}
+  
+  abun_average <- mean(c(sc_abun_median,hs_abun_median))
+  
+  abun_vec <- c(abun_vec, abun_average)
+  
+}
+
+abun_vec <- log(abun_vec,base=10)
+
+hs_sc_freq_abun <- data.frame(hs_sc_freq_combi,abun_vec)
+colnames(hs_sc_freq_abun) <- c('Domain','Sc','Hs','abundance')
+
+```
+
+## ggplot
+
+```{r}
+
+library(ggplot2)
+library(ggtext)
+library(ggrepel)
+library(viridis)
+
+hs_sc_freq_abun_sc <- hs_sc_freq_abun
+
+repel_df <- hs_sc_freq_abun[hs_sc_freq_abun[,3] >= 1.6 & hs_sc_freq_abun[,2] > 0.01,]
+repel_df <- repel_df[repel_df[,1] != 'Histone',] # For ease of visualisation
+
+###
+
+#p <- ggplot(hs_sc_freq_abun_sc, aes(x=Sc, y=Hs)) + geom_point(aes(size=abundance),color='black',fill=alpha("#5FD385", 0.175), stroke=0.125, shape=21)
+p <- ggplot(hs_sc_freq_abun_sc, aes(x=Sc, y=Hs)) + geom_point(aes(size=abundance),color='black',fill=colors()[200], stroke=0.125, shape=20, alpha=0.275)
+p <- p+geom_abline(intercept=0, slope = 1, color='red',linetype='dashed', lwd=0.8)
+p <- p+theme_bw() 
+
+
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme(axis.text=element_text(size=7),axis.title.x=element_text(size=11.0,face="bold"),axis.title.y=element_text(size=11.0,face="bold"),plot.title=element_text(size=12,face='bold'))
+
+p <- p + xlab('Pfam relative frequency (S. c)') + ylab('Pfam relative frequency (H. s)') + ggtitle('')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(panel.border= element_blank())
+p <- p + theme(legend.title=element_text(size=10.5),legend.text = element_text(size=10))
+
+p <- p+geom_label_repel(data=repel_df,aes(label = repel_df[,1]), size=3.25, color='black', label.size=0.25, label.r=0.15)
+p <- p + coord_cartesian(xlim = c(0, 2))
+p <- p + coord_cartesian(ylim = c(0, 10.0))
+p <- p + guides(size=guide_legend(title="abundance"))
+
+p1 <- p
+
+ggsave(file='Figure_4D.pdf', plot=p, width=4.75, height=4.0)
+
+write.table(hs_sc_freq_abun,file='Hs_Sc_pfam_high_confidence.txt',quote=F,row.names=F)
+write.csv(hs_sc_freq_abun,file='Hs_Sc_pfam_high_confidence.csv',quote=F,row.names=F)
+
+```
