@@ -1,0 +1,351 @@
+---
+title: "Figure_4e"
+author: "David Bradley"
+date: '2023-07-19'
+output: html_document
+---
+
+# List of all sites from phosphoproteomics
+
+```{r}
+
+# Collect all phophopeptides together from all master files
+
+master_files <- list.files('') # List all files in a directory that contains the master file for each kinase
+master_files <- master_files[-c(1,24)] # Remove master files for the two active pS/pT kinases 
+
+first_master <- read.csv(master_files[1])
+
+# Collect together all unique pY phosphosites from across all of the expressed kinases in this experiment
+
+master_master_file <- NULL
+
+for (i in 1:length(master_files)) {
+  
+  master_file <- read.csv(master_files[i])
+  colnames(master_file) <- colnames(first_master)
+  master_master_file <- rbind(master_master_file, master_file)
+  
+}
+
+master_file_global <- master_master_file
+
+```
+
+# Download the list of paralogs
+
+```{r}
+
+library(gdata)
+library(readxl)
+
+# The list of paralogs comes from Marchant and Cisneros et al, 2019
+
+marchant_sup <- read_xlsx('elife-46754-supp2-v1.xlsx',sheet=9)
+marchant_sup <- as.data.frame(marchant_sup)
+
+# Discard the PCA data
+marchant_sup <- marchant_sup[,1:5]
+
+#ssd <- marchant_sup[marchant_sup[,1] == 'SSD' & marchant_sup[,4] == 0 & marchant_sup[,5] == 0,] # All small scale duplications that did not arise either from successive duplications or a combination of SGD and WGi
+#wgd <- marchant_sup[marchant_sup[,1] == 'WGD' & marchant_sup[,4] == 0,] # All WGD, excluding any that were formed from a combination of WGD and SGD
+
+ssd <- marchant_sup[marchant_sup[,1] == 'SSD',]
+wgd <- marchant_sup[marchant_sup[,1] == 'WGD',]
+
+# combine
+
+para_pairs <- rbind(ssd, wgd) # 2446 paralog pairs
+
+```
+
+# The next job is to iterate through each paralog pair and try to find paralog specific peptides
+
+```{r}
+
+spec_dex <- NULL # Index of paralog pairs where each one contains at least one paralog-specific peptide
+
+for (i in 1:nrow(para_pairs)) {
+  
+  para_pair <- para_pairs[i,]
+  para_1 <- para_pair[,2]
+  para_2 <- para_pair[,3]
+  
+  # phospho data for paralog 1
+  para_1_master <- master_file_global[master_file_global[,7] %in% para_1,]
+  para_1_master <- para_1_master[,c(2,3,4,5,6,7,8,9,30,31,32,33,34,35)] # useful columns only
+  para_1_peptides <- para_1_master$peptide_seq
+  
+  # phospho data for paralog 2
+  para_2_master <- master_file_global[master_file_global[,7] %in% para_2,]
+  para_2_master <- para_2_master[,c(2,3,4,5,6,7,8,9,30,31,32,33,34,35)] # useful columns only
+  para_2_peptides <- para_2_master$peptide_seq
+  
+  #Find shared and specific peptide sequences
+  para_1_para_2_peptides <- intersect(para_1_peptides,para_2_peptides)
+  para_1_peptide_specific <- setdiff(para_1_peptides,para_2_peptides)
+  para_2_peptide_specific <- setdiff(para_2_peptides,para_1_peptides)
+  
+  # For the next step we require for there to be at least 1 peptide to be specific to each of the first and second paralogues
+  
+  if (length(para_1_peptide_specific) > 0 & length(para_2_peptide_specific) > 0) {
+    
+    spec_dex <- c(spec_dex,i)
+    
+  }
+    
+}
+
+para_pairs <- para_pairs[spec_dex,] # 432 paralog pairs after applying this filter
+
+```
+
+# Calculate site conservation for the paralogs based upon paralog-specific peptides
+
+```{r}
+
+sc_proteome <- seqinr::read.fasta('Scerevisiae_UP000002311_559292.fasta.gz',seqtype='AA') # Just read in the reference proteome from UniProt
+sc_accessions <- rapply(strsplit(names(sc_proteome),split='\\|'), function(x) x[2])
+
+# initialise data frame
+
+phospho_para_df <- NULL
+
+for (i in 1:nrow(para_pairs)) {
+  
+  print(i)
+  
+  para_pair <- para_pairs[i,]
+  para_1 <- para_pair[,2]
+  para_2 <- para_pair[,3]
+  
+  # phospho data for paralog 1
+  para_1_master <- master_file_global[master_file_global[,7] %in% para_1,]
+  para_1_master <- para_1_master[,c(2,3,4,5,6,7,8,9,30,31,32,33,34,35)] # useful columns only
+  para_1_peptides <- para_1_master$peptide_seq
+  
+  # phospho data for paralog 2
+  para_2_master <- master_file_global[master_file_global[,7] %in% para_2,]
+  para_2_master <- para_2_master[,c(2,3,4,5,6,7,8,9,30,31,32,33,34,35)] # useful columns only
+  para_2_peptides <- para_2_master$peptide_seq
+  
+  # find shared and specific peptide sequences
+  para_1_para_2_peptides <- intersect(para_1_peptides,para_2_peptides)
+  para_1_peptide_specific <- setdiff(para_1_peptides,para_2_peptides)
+  para_2_peptide_specific <- setdiff(para_2_peptides,para_1_peptides)
+  
+  # Retain only phospho data pertaining to the paralog-specific peptides
+    
+  para_1_specific_master <- para_1_master[para_1_master[,10] %in% para_1_peptide_specific,]
+  para_1_specific_master <- para_1_master[!duplicated(para_1_master[,c(4,5)]),] # unique sites only
+  
+  para_2_specific_master <- para_2_master[para_2_master[,10] %in% para_2_peptide_specific,]
+  para_2_specific_master <- para_2_master[!duplicated(para_2_master[,c(4,5)]),] # unique sites only
+  
+  para_1_pos <- readr::parse_number(para_1_specific_master[,5]) #P1 pos
+  para_2_pos <- readr::parse_number(para_2_specific_master[,5]) #P2 pos
+  
+  # Retrieve UniProt accessions
+  
+  para1_accession <- unique(para_1_specific_master$proteins)
+  para2_accession <- unique(para_2_specific_master$proteins)
+  
+  para_accessions <- c(para1_accession,para2_accession)
+  
+  if(length(para_accessions) != 2) {stop('There should be two paralogues')}
+  
+  # Generate a fasta file of the two paralogs 
+  
+  para_seq_1 <- sc_proteome[sc_accessions %in% para1_accession]
+  para_seq_2 <- sc_proteome[sc_accessions %in% para2_accession]
+  
+  para_seq <- c(para_seq_1, para_seq_2)
+  
+  # Write out the FASTA sequence to file
+  
+  file_name <- paste(para_1,'_',para_2,'.fa',sep='')
+  file_name <- paste('/home/david/Documents/Work/Bradley_et_al_2023/Evolution_figure/paralog_seq/',file_name,sep='')
+  
+  seqinr::write.fasta(para_seq,names=names(para_seq),file=file_name)
+  
+  # MAFFT L-INS-i alignment of the paralog pairs
+  
+  input <- file_name
+  output <- gsub('.fa','_al.fa',file_name)
+  
+  mafft_com <- paste('mafft --localpair --maxiterate 1000',input,'>',output) 
+  system(mafft_com)
+  
+  # sequence identity
+  
+  output_file <- seqinr::read.alignment(output, seqtype='AA',format='fasta')
+  identity <- 1-(seqinr::dist.alignment(output_file,matrix='identity',gap=FALSE)^2) # I have manually confirmed that this is the expected output
+  identity <- as.numeric(identity)
+  
+  # Generate alignment mapping table
+  
+  para1_seq <- seqinr::read.fasta(output, seqtype='AA')[[1]]
+  para1_seq <- seqinr::getSequence(para1_seq)
+  
+  para2_seq <- seqinr::read.fasta(output, seqtype='AA')[[2]]
+  para2_seq <- seqinr::getSequence(para2_seq)
+  
+  ### paralog 1 map
+  
+  aa_vec <- NULL
+  al_vec <- NULL
+  aa_id_vec <- NULL
+  aa_seq = 0
+  al_seq = 0
+  
+  for (j in 1:length(para1_seq)) {
+    
+    al_seq = al_seq+1
+    
+    if(para1_seq[j] == '-') {aa_vec <- c(aa_vec,'-')}
+    if(para1_seq[j] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+    al_vec <- c(al_vec,al_seq)
+    aa_id_vec <- c(aa_id_vec,para1_seq[j])
+  }
+  
+  al_map_df <- data.frame(al_vec,aa_vec,aa_id_vec)
+  colnames(al_map_df) <- c('alignment','primary','P1_aa') 
+  rownames(al_map_df) <- NULL
+  
+  al_map_df_1 <- al_map_df
+  
+  ### paralog2 2 map
+  
+  aa_vec <- NULL
+  al_vec <- NULL
+  aa_id_vec <- NULL
+  aa_seq = 0
+  al_seq = 0
+  
+  for (j in 1:length(para2_seq)) {
+    
+    al_seq = al_seq+1
+    
+    if(para2_seq[j] == '-') {aa_vec <- c(aa_vec,'-')}
+    if(para2_seq[j] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+    al_vec <- c(al_vec,al_seq)
+    aa_id_vec <- c(aa_id_vec,para2_seq[j])
+  }
+  
+  al_map_df <- data.frame(al_vec,aa_vec,aa_id_vec)
+  colnames(al_map_df) <- c('alignment','primary','P2_aa') 
+  rownames(al_map_df) <- NULL
+  
+  al_map_df_2 <- al_map_df
+
+  ####
+  
+  # Combine the mapping tables
+  
+  al_map_para1_para2 <- cbind(al_map_df_1,al_map_df_2[,c(2,3)])
+  colnames(al_map_para1_para2) <- c('alignment','P1_seq','P1_aa','P2_seq','P2_aa')
+  
+  mapping_file <- paste(para_1,'_',para_2,'_map.txt',sep='')
+  mapping_file <- paste('/home/david/Documents/Work/Bradley_et_al_2023/Evolution_figure/paralog_seq/',mapping_file,sep='')
+    
+  # Write out the mapping tables to file
+  
+  write.table(al_map_para1_para2,file=mapping_file, row.names=F, quote=F)
+  
+  # Check for phosphosite conservation between the paralogs
+  
+  para_1_pY <- al_map_para1_para2[al_map_para1_para2[,2] %in% para_1_pos,]
+  para_1_pY <- data.frame('P1',para_1_pY)
+  para_2_pY <- al_map_para1_para2[al_map_para1_para2[,4] %in% para_2_pos,]
+  para_2_pY <- data.frame('P2',para_2_pY)
+  colnames(para_2_pY) <- colnames(para_1_pY)
+  
+  # Unique pY positions
+ 
+  para_pY <- rbind(para_1_pY,para_2_pY)
+  para_pY <- para_pY[!duplicated(para_pY[,c(2,3,4,5)]),] # unique alignment positions only
+  
+  # As a control, check to make sure that the positions that we detect as phosphorylated contain a Y at this position
+  
+  p1_dex <- which(para_pY[,1] == 'P1' & para_pY[,4] == 'Y')
+  p2_dex <- which(para_pY[,1] == 'P2' & para_pY[,6] == 'Y')
+  
+  if(!(identical(which(para_pY[,1] == 'P1'),p1_dex))) {stop('mapping problem')}
+  if(!(identical(which(para_pY[,1] == 'P2'),p2_dex))) {stop('mapping problem')}
+  
+  # Assign 'single' or 'pair' phosphorylation status
+   
+  single_dex <- !(para_pY[,3] %in% para_1_pos & para_pY[,5] %in% para_2_pos)
+  pair_dex <- (para_pY[,3] %in% para_1_pos & para_pY[,5] %in% para_2_pos)
+  
+  para_class <- rep('single',nrow(para_pY))
+  para_class[pair_dex] <- 'pair'  
+  
+  # append sequence identity to existing data frame
+  
+  para_pY <- data.frame(para_pY,identity)
+  
+  # append classification to existing data frame
+  
+  para_pY <- data.frame(para_pY,para_class)
+  
+  # Finally, add the identity of the paralogs to the data frame
+  
+  para_pY <- data.frame(para_pair[,1],para_1, para_2, para_pY)
+  
+  # column names
+  
+  colnames(para_pY) <- c('paralog_type','P1','P2','phospo-paralog','alignment','P1_seq','P1_aa','P2_seq','P2_aa','seq_identity','class')
+  
+  # append to data frame
+  
+  phospho_para_df <- rbind(phospho_para_df, para_pY)
+  
+}
+
+# write out the file
+
+write.table(phospho_para_df,file='phospho_paralogs.txt',quote=F,row.names=F)
+write.csv(phospho_para_df,file='phospho_paralogs.csv',quote=F,row.names=F)
+
+## subset dataframe for cases where both amino acids that align are a Y
+
+phospho_para_df_YY <- phospho_para_df[phospho_para_df[,7] == 'Y' & phospho_para_df[,9] == 'Y',]
+
+```
+
+## ggplot the results
+
+```{r}
+
+single_count <- unname(table(phospho_para_df_YY[,11]))[2]
+pair_count <- unname(table(phospho_para_df_YY[,11]))[1]
+
+col1 <- c('single','pair')
+col2 <- c(single_count,pair_count)
+
+gg_para_df <- data.frame(col1,col2)
+colnames(gg_para_df) <- c('class','frequency')
+
+gg_para_df$class <- factor(gg_para_df$class, levels = c("single","pair"))
+
+####
+
+library(ggplot2)
+
+p <- ggplot(gg_para_df, aes(x=class, y=frequency, width=.4)) + geom_bar(color=NA, lwd=0, stat='identity',alpha=0.65) + scale_fill_manual(values = c(colors()[261]))
+p <- p+theme_bw() 
+p <- p+theme(axis.text.y=element_text(size=7),axis.text.x=element_text(size=9.5),axis.title.x=element_text(size=4.5,face="plain"),axis.title.y=element_text(size=10.0,face="plain"),plot.title=element_text(size=11,face='plain'))
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p + ylab("no. of pY sites") + xlab("") + ggtitle('paralog conservation')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.position = "none")
+p <- p + theme(panel.border= element_blank())
+
+ggsave(file='Figure_4E.pdf', plot=p, width=3.0, height=3.0)
+
+```
+
+
+
+
