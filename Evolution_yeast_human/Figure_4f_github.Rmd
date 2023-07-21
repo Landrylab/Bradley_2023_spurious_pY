@@ -251,8 +251,6 @@ for (i in 1:length(accession_pos_native_vec)) {
       test_df <- rbind(test_df,test_vec)
     }
     
-    #if(nrow(test_df) > 0) {stop()}
-    
   }
   
 }
@@ -296,10 +294,12 @@ al_files <- al_files[grep('compiled.fa',al_files)]
 al_file_IDs <- rapply(strsplit(al_files,split='_'), function(x) x[1])
 
 # Do the random sampling 100 times
+# i.e. the phospho-tyrosine positions in human are randomly shuffled (permuted) and then the extent of alignment conservation is calculated 
+# repeat the sampling 100 times
 
 cons_sample_vec <- NULL
 
-for (z in 1:10) {
+for (z in 1:100) {
     
     print(z)
   
@@ -561,40 +561,48 @@ for (z in 1:10) {
 total_conservation <- nrow(hs_sc_hc_pos0)/length(accession_pos_native_vec)
 yeast_pY_human_conservation <- nrow(hs_sc_hc_pos0)/sc_hs_ortho_no
 yeast_pY_human_pY_conservation <- nrow(hs_sc_hc_pos0)/sc_hc_pos0
-yeast_pY_human_pY_conservation_randomised <- nrow(test_df_random_nr)/sc_hc_pos0
+yeast_pY_human_pY_conservation_randomised <- mean(cons_sample_vec)
 
 total_conservation <- total_conservation*100
 yeast_pY_human_conservation <- yeast_pY_human_conservation*100
 yeast_pY_human_pY_conservation <- yeast_pY_human_pY_conservation*100
 yeast_pY_human_pY_conservation_randomised <- yeast_pY_human_pY_conservation_randomised*100
 
-#### fisher test enrichment for site level conservation (observed against expected)
-
-conserved_observed <- nrow(test_df_nr)
-conserved_expected <- nrow(test_df_random_nr)
-
 #####
 
 library(viridis)
+library(ggplot2)
+library(ggsignif)
 
 num_vec <- c(total_conservation,yeast_pY_human_conservation,yeast_pY_human_pY_conservation,yeast_pY_human_pY_conservation_randomised)
-df <- data.frame(class=c("yeast pY", "yeast pY: human", "yeast pY: human \n(observed)", "yeast pY: human pY \n(expected)"),num=num_vec)
+df <- data.frame(class=c("yeast pY", "yeast pY: human", "yeast pY: human pY \n(observed)", "yeast pY: human pY \n(random)"),num=num_vec)
 
-df$class <- factor(df$class, levels = c("yeast pY", "yeast pY: human", "yeast pY: human \n(observed)", "yeast pY: human pY \n(expected)"))
+df$class <- factor(df$class, levels = c("yeast pY", "yeast pY: human", "yeast pY: human pY \n(observed)", "yeast pY: human pY \n(random)"))
+
+# add the standard deviation for the randomised sample
+
+sd_vec <- c(NA,NA,NA,sd(cons_sample_vec*100))
+
+df <- data.frame(df, sd_vec)
+colnames(df) <- c('class','num','sd')
+
+write.table(df,file='4F_df.txt',row.names=F,quote=F)
+
+## ggplot2
 
 p <- ggplot(df, aes(x=class, y=num, fill = class, width=.5)) + geom_bar(color=NA, lwd=0, stat='identity',alpha=0.4) + scale_fill_manual(values = c(rev(cividis(25))[1],colors()[131],colors()[551],colors()[261]))
+p <- p+geom_errorbar(aes(ymin=num-sd, ymax=num+sd), width=.2,position=position_dodge(.9),lwd=1)
 p <- p+theme_bw() 
-p <- p+theme(axis.text.y=element_text(size=9),axis.text.x=element_text(size=8.5),axis.title.x=element_text(size=4.5,face="plain"),axis.title.y=element_text(size=11,face="bold"),plot.title=element_text(size=11,face='plain'))
+p <- p+theme(axis.text.y=element_text(size=14),axis.text.x=element_text(size=10.5),axis.title.x=element_text(size=4.5,face="plain"),axis.title.y=element_text(size=21,face="bold"),plot.title=element_text(size=20,face='plain'))
 p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
 p <- p + coord_cartesian(ylim = c(0, 20.5))
 p <- p + ylab("% conservation with human pY") + xlab("") + ggtitle('conservation (pY-site level)')
 p <- p + theme(plot.title = element_text(hjust = 0.5))
 p <- p + theme(legend.position = "none")
 p <- p + theme(panel.border= element_blank())
+p <- p + geom_signif(comparisons = list(c("yeast pY: human pY \n(observed)", "yeast pY: human pY \n(random)")), annotations="***",y_position=15.5,lwd=1,textsize=8.75)
 
-ggsave(file='/home/david/Documents/Work/Bradley_et_al_2023/Evolution_figure/human_yeast_conservation_site_level_figure.pdf', plot=p, width=4.5, height=3.25)
-
-df_0 <- df
+ggsave(file='Figure_4f.pdf', plot=p, width=6.8, height=5.4)
 
 ```
 
