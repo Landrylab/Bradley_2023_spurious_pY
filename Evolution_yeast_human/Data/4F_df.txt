@@ -1,0 +1,7 @@
+class num sd
+yeast pY 3.14080383284536 NA
+yeast pY: human 8.20013898540653 NA
+yeast pY: human pY 
+(observed) 15.4855643044619 NA
+  yeast pY: human pY 
+(random) 8.85564304461942 0.862974606061706
