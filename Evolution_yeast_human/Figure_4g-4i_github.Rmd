@@ -1,5 +1,5 @@
 ---
-title: "Human_pY"
+title: "Figure 4g - Figure 4i"
 author: "David Bradley"
 date: "6/2/2022"
 output: html_document
@@ -49,7 +49,7 @@ native_intersect_uniprot <- native_intersect_uniprot[,1]
 
 library(readr)
 
-master_file <- read.csv('/home/david/Documents/Work/Bradley_et_al_2023/master_file_unique_new_native.csv')
+master_file <- read.csv('master_file_unique_new_native.csv')
 master_file <- master_file[master_file[,10] == 'No',]
 master_file_df <- master_file[,c(6,7,11)]
 
@@ -62,7 +62,7 @@ yeast_spurious_disorder <- yeast_spurious_disorder[!uniprot_pos %in% native_unio
 
 ### Yeast native
 
-yeast_native_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_native_pY/native_RSA_disorder.txt',stringsAsFactors = F, head=T)
+yeast_native_disorder <- read.table('native_RSA_disorder.txt',stringsAsFactors = F, head=T)
 yeast_native_disorder <- yeast_native_disorder[,c(1,2,3)]
 
 # High-confidence native sites only
@@ -72,23 +72,18 @@ yeast_native_disorder <- yeast_native_disorder[accession_pos %in% native_interse
 
 # Yeast non_pY
 
-yeast_non_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_yeast_non-pY/yeast_non-pY_RSA_disorder.txt',head=T, stringsAsFactors = F)
+yeast_non_pY_disorder <- read.table('yeast_non-pY_RSA_disorder.txt',head=T, stringsAsFactors = F)
 yeast_non_pY_disorder <- yeast_non_pY_disorder[,c(1,2,3)]
 
 # Human pY
 
-human_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_human_pY/human_RSA_disorder_psp_5.txt',head=T, stringsAsFactors = F)
+human_pY_disorder <- read.table('human_RSA_disorder_psp_5.txt',head=T, stringsAsFactors = F)
 human_pY_disorder <- human_pY_disorder[,c(1,2,4)]
 human_pY_disorder <- human_pY_disorder[human_pY_disorder[,3] != 'na',]
 
 # Human non pY
 
-human_non_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_human_non-pY/human_non-pY_RSA_disorder_psp_5_v2.txt',head=T, stringsAsFactors = F)
-
-
-#repair_accessions <- list.files('/home/david/Documents/Work/HFSP_2022_human_non-pY/human_repaired_PDBs_non_pY_2023/')
-#repair_accessions <- repair_accessions[grep('Repair.pdb',repair_accessions)]
-#repair_accessions <- rapply(strsplit(repair_accessions,split='-'), function(x) x[2])
+human_non_pY_disorder <- read.table('human_non-pY_RSA_disorder_psp_5_v2.txt',head=T, stringsAsFactors = F)
 
 human_non_pY_disorder <- human_non_pY_disorder[,c(3,2,1)]
 
@@ -155,7 +150,7 @@ p <- p + theme(legend.position = "none") # axis.line = element_blank(), panel.bo
 p <- p+geom_text(data=data.frame(), aes(x=c(1:5), y=rep(1.05,5)), label=size_vec,col=colors()[190], fontface='plain', size=3.5, inherit.aes = FALSE)
 p <- p + theme(panel.border= element_blank())
 
-ggsave(file='/home/david/Documents/Work/Bradley_et_al_2023/Evolution_figure/github_files/Figure_4g.pdf', plot=p, width=6, height=5.0)
+ggsave(file='Figure_4g.pdf', plot=p, width=6, height=5.0)
 
 ```
 
@@ -167,7 +162,7 @@ ggsave(file='/home/david/Documents/Work/Bradley_et_al_2023/Evolution_figure/gith
 
 library(readr)
 
-master_file <- read.csv('/home/david/Documents/Work/Bradley_et_al_2023/master_file_unique_new_native.csv')
+master_file <- read.csv('master_file_unique_new_native.csv')
 master_file <- master_file[master_file[,10] == 'No',]
 master_file_df <- master_file[,c(6,7,14)]
 
@@ -180,7 +175,7 @@ yeast_spurious_disorder <- yeast_spurious_disorder[!uniprot_pos %in% native_unio
 
 # Yeast native
 
-yeast_native_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_native_pY/native_RSA_disorder.txt')
+yeast_native_disorder <- read.table('native_RSA_disorder.txt')
 yeast_native_disorder <- yeast_native_disorder[,c(1,2,5)]
 
 # High-confidence native sites only
@@ -190,17 +185,17 @@ yeast_native_disorder <- yeast_native_disorder[accession_pos %in% native_interse
 
 # Yeast non_pY
 
-yeast_non_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_yeast_non-pY/yeast_non-pY_RSA_disorder.txt',head=T)
+yeast_non_pY_disorder <- read.table('yeast_non-pY_RSA_disorder.txt',head=T)
 yeast_non_pY_disorder <- yeast_non_pY_disorder[,c(1,2,5)]
 
 # Human pY
 
-human_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_human_pY/human_RSA_disorder_psp_5.txt',head=T)
+human_pY_disorder <- read.table('human_RSA_disorder_psp_5.txt',head=T)
 human_pY_disorder <- human_pY_disorder[,c(1,2,6)]
 
 # Human non pY
 
-human_non_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_human_non-pY/human_non-pY_RSA_disorder_psp_5_v2.txt',head=T)
+human_non_pY_disorder <- read.table('human_non-pY_RSA_disorder_psp_5_v2.txt',head=T)
 human_non_pY_disorder <- human_non_pY_disorder[,c(1,2,3)]
 
 
@@ -239,7 +234,7 @@ p <- p + theme(legend.position = "none") # axis.line = element_blank(), panel.bo
 p <- p+geom_text(data=data.frame(), aes(x=c(1:5), y=rep(95,5)), label=size_vec,col=colors()[190], fontface='plain', size=3.5, inherit.aes = FALSE)
 p <- p + theme(panel.border= element_blank())
 
-ggsave(file='/home/david/Documents/Work/Bradley_et_al_2023/Evolution_figure/github_files/Figure_4h.pdf', plot=p, width=6, height=5.0)
+ggsave(file='Figure_4h.pdf', plot=p, width=6, height=5.0)
 
 ```
 
@@ -249,21 +244,21 @@ ggsave(file='/home/david/Documents/Work/Bradley_et_al_2023/Evolution_figure/gith
 
 ```{r}
 
-ddG_yeast_Y <- readRDS('/home/david/Documents/Work/HFSP_2022_yeast_non-pY/yeast_non_pY_ddG.rds')
+ddG_yeast_Y <- readRDS('yeast_non_pY_ddG.rds')
 ddG_yeast_Y_frac <- length(which(ddG_yeast_Y > 2))/length(ddG_yeast_Y)
 
-ddG_human_Y <- read.table('/home/david/Documents/Work/HFSP_2022_human_non-pY/ddG1_ddG2_df_non_pY_2023.txt',head=T)
+ddG_human_Y <- read.table('ddG1_ddG2_df_non_pY_2023.txt',head=T)
 ddG_human_Y_frac <- length(which(ddG_human_Y[,3] > 2))/nrow(ddG_human_Y)
 
-ddG_yeast_native_pY <- read.table('/home/david/Documents/Work/HFSP_2022_native_pY/native_Y_ddG_July_2023.txt',head=T)
+ddG_yeast_native_pY <- read.table('native_Y_ddG_July_2023.txt',head=T)
 ddG_yeast_native_pY_frac <- length(which(ddG_yeast_native_pY[,3] > 2))/nrow(ddG_yeast_native_pY)
 
-ddG_human_pY <- read.table('/home/david/Documents/Work/HFSP_2022_human_pY/ddG1_ddG2_df_2023.txt',head=T)
+ddG_human_pY <- read.table('ddG1_ddG2_df_2023.txt',head=T)
 ddG_human_pY_frac <- length(which(ddG_human_pY[,3] > 2))/nrow(ddG_human_pY)
 
 # Retrieve all unique sites for the spurious pY
 
-master_file <- read.csv('/home/david/Documents/Work/Bradley_et_al_2023/master_file_unique_new_native.csv')
+master_file <- read.csv('master_file_unique_new_native.csv')
 master_file <- master_file[master_file[,10] == 'No',]
 master_file_df <- master_file[,c(6,7,15)]
 
@@ -294,536 +289,12 @@ p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border
 p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
 
 p <- p + ylab("% destabilising (predicted)") + xlab("") + ggtitle('')
-#p <- p + theme(axis.title.y = element_text(vjust=-1.5))
 p <- p+theme(axis.text=element_text(size=11),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=19,face="plain"),plot.title=element_text(size=8,face='bold'))
 p <- p+theme(plot.title = element_text(hjust = 0.5))
 p <- p + theme(legend.position = "none") # axis.line = element_blank(), panel.border = element_blank())
 p <- p+geom_text(data=data.frame(), aes(x=c(1:5), y=rep(40,5)), label=size_vec,col=colors()[190], fontface='plain', size=3.5, inherit.aes = FALSE)
 p <- p + theme(panel.border= element_blank())
 
-ggsave(file='/home/david/Documents/Work/Bradley_et_al_2023/Evolution_figure/github_files/Figure_4i.pdf', plot=p, width=6, height=5.0)
-
-```
-
-# Native sites
-
-```{r}
-
-library(readr)
-library(bio3d)
-library(RCurl)
-library(seqinr)
-
-setwd("~/Documents/Work/HFSP_2022_native_pY")
-
-Lanz_psites <- read.csv('/home/david/Documents/Work/HFSP_2022/Native_yeast_sites/Lanz_phosphosites_UniProt_map.csv',head=T)
-yeast_proteome <- seqinr::read.fasta('Scerevisiae_canonical_proteome_uniprot.fasta', seqtype='AA')
-yeast_proteome_accession <- rapply(strsplit(names(yeast_proteome),split='\\|'), function(x) x[2])
-#Lanz_psites <- Lanz_psites[!Lanz_psites[,5] %in% c('?','Clustered_site'),]
-phosphosite_vec <- paste(Lanz_psites[,2],'_',Lanz_psites[,3],sep='')
-
-# Identify Y sites
-
-phosphoacceptor_vec <- NULL
-p_acceptor_vec <- NULL
-
-for (i in 1:length(phosphosite_vec)) {
-  
-  print(i)
-  
-  psite <- phosphosite_vec[i]
-  accession <- rapply(strsplit(psite,split='_'), function(x) x[1])
-  pos <- as.numeric(rapply(strsplit(psite,split='_'), function(x) x[2]))
-  
-  substrate <- yeast_proteome[match(accession,yeast_proteome_accession)]
-  
-  if(length(unlist(substrate)) == 0) {next}
-  
-  substrate_seq <- unlist(getSequence(substrate))
-  phosphoacceptor <- substrate_seq[pos]
-  
-  phosphoacceptor_vec <- c(phosphoacceptor_vec, phosphoacceptor)
-  
-  p_acceptor_vec <- c(p_acceptor_vec,paste(accession,'_',pos,'_',phosphoacceptor,sep=''))
-  
-}
-
-# Identify Y sites
-
-Y_sites <- unique(p_acceptor_vec[grep('_Y',p_acceptor_vec)])
-
-```
-
-
-# Check to see how many high-confidence native pYs were phosphorylated by the human tryosine kinases
-
-```{r}
-
-library(readr)
-
-master_files <- list.files('/home/david/Documents/Work/HFSP_2022/master_files')
-
-psites_vec <- NULL
-
-for (i in 1:length(master_files)) {
-  
-  master_file <- read.csv(paste('/home/david/Documents/Work/HFSP_2022/master_files/',master_files[i],sep=''),stringsAsFactors = F)
-  psites <- paste(master_file[,5],'_',parse_number(master_file[,6]),'_',substr(master_file[,6],1,1),sep='')
-  psites_vec <- c(psites_vec,psites)
-  
-}
-
-psites_vec <- unique(psites_vec)
-psites_vec <- c(psites_vec,Y_sites)
-psites_vec <- unique(psites_vec)
-psites_vec_Y <- psites_vec[grep('_Y',psites_vec)]
-
-mod_sites_accession_Y <- rapply(strsplit(psites_vec_Y,split='_'), function(x) x[1])
-mod_sites_pos_Y <- as.numeric(rapply(strsplit(psites_vec_Y,split='_'), function(x) x[2]))
-
-```
-
-# Read in the high confidence human pY sites
-
-```{r}
-
-library(readr)
-library(bio3d)
-library(RCurl)
-library(seqinr)
-
-# AF2 files
-
-yeast_AF2_files <- list.files('/home/david/Documents/Software/AF2_YEAST')
-
-# Surface accessibility data frame
-
-col1 <- c('A', 'R', 'N', 'D', 'C', 'E', 'Q', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V')
-col2 <- c(121.0, 265.0, 187.0, 187.0, 148.0, 214.0, 214.0, 97.0, 216.0, 195.0, 191.0, 230.0, 203.0, 228.0, 154.0, 143.0, 163.0, 264.0, 255.0, 165.0)
-
-maxASA_df <- data.frame(col1, col2)
-colnames(maxASA_df) <- c('AA','maxASA')
-
-stopper <- 0
-options(warn=2)
-
-setwd("~/Documents/Work/HFSP_2022_yeast_non-pY/yeast_RSA_disorder")
-
-new_dir <- getwd()
-
-sc_proteome <- seqinr::read.fasta('/home/david/Documents/Work/HFSP_2022_yeast_non-pY/Scerevisiae_canonical_proteome_uniprot.fasta',seqtype = 'AA')
-sc_proteome_accessions <- rapply(strsplit(names(sc_proteome),split='\\|'), function(x) x[2])
-sc_proteome_seq <- getSequence(sc_proteome)
-
-for (i in 1:1) {
-  
-  # Obtain unique accessions from the file containing high-confidence pY
-  
-  master_accession <- unique(rapply(strsplit(psites_vec_Y,split='_'), function(x) x[1]))
-  
-  # Set up vectors
-  
-  RSA_smooth_vec <- NULL
-  disorder_prediction_vec <- NULL
-  Y_RSA_vec <- NULL
-  accession_vec <- NULL
-  pos_vec <- NULL
-  
-  if (stopper == 1) {break}
-  
-  for (j in 1:length(master_accession)) {  # 
-  
-    print(j)
-    
-    accession <- master_accession[j]
-    
-    # Find all Y in the protein of interest
-    
-    prot_seq <- unlist(sc_proteome_seq[sc_proteome_accessions %in% accession])
-    
-    prot_seq_Y <- grep('Y',prot_seq)
-    
-    # From this remove the phosphorylated Y
-    
-    accession_pY <- mod_sites_pos_Y[grep(accession,mod_sites_accession_Y)]
-    
-    prot_seq_non_pY <- setdiff(prot_seq_Y,accession_pY)
-    
-    if(length(prot_seq_non_pY) == 0) {next}
-    
-    # extract the repaired PDB
-    
-    structure_files <- yeast_AF2_files[grep(accession, yeast_AF2_files)]
-    structure_file <- structure_files[grep('.pdb',structure_files)]
-    
-    if (length(structure_file) == 0) {
-      RSA_smooth_vec <-c(RSA_smooth_vec, 'na')
-      Y_RSA_vec <-c(Y_RSA_vec, 'na')
-      disorder_prediction_vec <-c(disorder_prediction_vec, 'na')
-      accession_vec <-c(accession_vec, 'na')
-      pos_vec <-c(pos_vec, 'na'); next
-    } 
-    
-    structure_path <- paste('/home/david/Documents/Software/AF2_YEAST/',structure_file,sep='')
-    gzip_command <- paste('gzip -dk',structure_path)
-    system(gzip_command)
-    
-    # Move PDB file over to current directory
-    
-    pdb_file <- substr(structure_path,1,nchar(structure_path)-3)
-    mv_com <- paste('mv',pdb_file,new_dir)
-    system(mv_com)
-    
-    repair_input <- substr(structure_file,1,nchar(structure_file)-3)
-    
-    # In cases where the protein is split into multiple chains
-    
-     if (length(repair_input) > 1) {
-      RSA_smooth_vec <-c(RSA_smooth_vec, 'na')
-      Y_RSA_vec <-c(Y_RSA_vec, 'na')
-      disorder_prediction_vec <-c(disorder_prediction_vec, 'na')
-      accession_vec <-c(accession_vec, 'na')
-      pos_vec <-c(pos_vec, 'na'); next
-    }
-    
-    af_model <- read.pdb(repair_input)
-   
-    for (k in 1:length(prot_seq_non_pY)) {
-       
-      print(paste(j,k))
-      
-      pos <- prot_seq_non_pY[k]
-      
-      af_model_pos <- af_model$atom[af_model$atom$resno == pos,]
-        
-      pdb_start <- af_model$atom$resno[1]
-      pdb_end <- rev(af_model$atom$resno)[1] 
-        
-      WT_res <- unique(af_model_pos$resid)
-      chain <- unique(af_model_pos$chain)
-      
-      # Skip to the next interation if the AF2 model does not include the modified residue
-        
-      if (length(WT_res) != 1) {next}
-      if (length(chain) != 1) {next}
-      if(WT_res != 'TYR') {next}
-      if(WT_res == 'TYR') {WT_res <- 'Y'}
-      
-      ##### Run DSSP
-      
-      # Installation instructions for DSSP
-      # https://ssbio.readthedocs.io/en/latest/instructions/dssp.html
-      
-      bio3d_pdb <- read.pdb(repair_input)
-      PDB_seq <- pdbseq(bio3d_pdb)
-      
-      # Check first to make sure that the position in your table corresponds to a tyrosine
-        
-      res_length <- length(unique(bio3d_pdb$atom[bio3d_pdb$atom$resno == pos,5]))
-      res_id <- unique(bio3d_pdb$atom[bio3d_pdb$atom$resno == pos,5])
-        
-      if (res_length != 1) {stop('We have a problem'); stopper <- 1}
-      if (res_id != 'TYR') {stop('We have a problem'); stopper <- 1}
-      
-      if (stopper == 1) {break}
-      
-      # Execute DSSP from within R (using bio3d)
-        
-      dssp_acc <- dssp(bio3d_pdb,exefile='dssp',resno=T,verbose=F)$acc
-      dssp_sse <- dssp(bio3d_pdb,exefile='dssp',resno=T,verbose=F)$sse
-      names(dssp_acc) <- names(dssp_sse)
-      
-      acc_label <- paste(strsplit(names(dssp_acc), split='NA'),PDB_seq,sep='')
-      names(dssp_acc) <- acc_label[1:length(dssp_acc)]
-      dssp_pos <- as.numeric(rapply(strsplit(names(dssp_acc),split='_'), function(x) x[1]))
-      
-      dssp_max_acc <- maxASA_df[match(rapply(strsplit(names(dssp_acc),split='_'), function(x) x[3]),maxASA_df[,1]),2] 
-      dssp_RSA <- dssp_acc / dssp_max_acc
-      
-      # Extract the residue RSA
-      
-      pdb_index <- which(dssp_pos == pos)
-      Y_RSA <- dssp_RSA[pdb_index]
-      Y_RSA <- round(Y_RSA,3)
-      Y_RSA_vec <- c(Y_RSA_vec, Y_RSA)
-      RSA_aa <- rapply(strsplit(names(Y_RSA), split='_'), function(x) x[3])
-      if (RSA_aa != 'Y') {stop('We have a problem'); stopper <- 1}
-      if (stopper == 1) {break}
-      
-      # Extract the window RSA
-      
-      start <- pdb_index-12 # No 0 residue
-      end <- pdb_index+12
-      
-      # Mirror if the phosphosite is at a terminus
-      
-      if (start < 1) {
-        
-        pep <- 1:end
-        pep_len <- length(pep)
-        new_len <- 25-pep_len
-        new_pep <- pep[1:new_len]
-        new_pep <- rev(new_pep)
-        dssp_window <- dssp_RSA[c(new_pep,pep)]
-        dssp_mean <- mean(dssp_window)
-        
-      } else if (end > length(dssp_RSA)) {
-        
-        pep <- start:length(dssp_RSA)
-        pep_len <- length(pep)
-        new_len <- 25-pep_len-1
-        new_pep <- pep[length(pep):(length(pep)-new_len)]
-        dssp_window <- dssp_RSA[c(pep,new_pep)]
-        dssp_mean <- mean(dssp_window)
-        
-      } else {
-        
-        dssp_window <- dssp_RSA[start:end]
-        dssp_mean <- mean(dssp_window)
-      }
-      
-      RSA_smooth_vec <- c(RSA_smooth_vec, round(dssp_mean,3))
-      
-      
-      if(dssp_mean >= 0.581) {disorder <- 'disordered'}
-      if(dssp_mean < 0.581) {disorder <- 'ordered'}
-      
-     # print(round(dssp_mean,3))
-    #  print(disorder)
-      
-      disorder_prediction_vec <- c(disorder_prediction_vec, disorder)
-      accession_vec <- c(accession_vec, accession)
-      pos_vec <- c(pos_vec, pos)
-      
-      if(length(RSA_smooth_vec) != length(disorder_prediction_vec)) {stop('!!!')}
-      
-      
-      
-    }
-  }
-
-}
-
-#human_rsa_disorder <- cbind(accession_vec,pos_vec,RSA_smooth_vec,disorder_prediction_vec)
-#colnames(human_rsa_disorder) <- c('accession','position','window','Y_RSA','RSA_smooth','disorder_prediction')
-yeast_rsa_disorder <- cbind(accession_vec,pos_vec,Y_RSA_vec,RSA_smooth_vec,disorder_prediction_vec)
-colnames(yeast_rsa_disorder) <- c('accession','pos','Y_RSA','RSA_smooth','disorder_prediction')
-setwd("~/Documents/Work/HFSP_2022_yeast_non-pY/")
-write.table(yeast_rsa_disorder,file='yeast_non-pY_RSA_disorder.txt',quote=F,row.names=F)
-saveRDS(yeast_rsa_disorder,'yeast_non-pY_RSA_disorder.rds')
-
-```
-
-## ggplot disorder
-
-```{r}
-
-# Yeast spurious pY
-
-library(readr)
-
-master_files <- list.files('/home/david/Documents/Work/HFSP_2022/master_files')
-
-master_file_df <- NULL
-
-for (i in 1:length(master_files)) {
-  
-  master_file <- read.csv(paste('/home/david/Documents/Work/HFSP_2022/master_files/',master_files[i],sep=''),stringsAsFactors = F)
-  #master_file <- master_file[!master_file$imputed,]
-  master_file <- master_file[,c(5,6,13)]
-  master_file_df <- rbind(master_file_df,master_file)
-  
-}
-
-yeast_spurious_disorder <- unique(master_file_df)
-
-# Yeast native
-
-yeast_native_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_native_pY/native_RSA_disorder.txt')
-yeast_native_disorder <- yeast_native_disorder[,c(1,2,5)]
-
-# Yeast non_pY
-
-yeast_non_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_yeast_non-pY/yeast_non-pY_RSA_disorder.txt',head=T)
-yeast_non_pY_disorder <- yeast_non_pY_disorder[,c(1,2,5)]
-
-# Human pY
-
-human_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_human_pY/human_RSA_disorder_ochoa_psp_5.txt',head=T)
-human_pY_disorder <- human_pY_disorder[,c(1,2,6)]
-
-# Human non pY
-
-human_non_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_human_non-pY/human_non-pY_RSA_disorder.txt',head=T)
-human_non_pY_disorder <- human_non_pY_disorder[,c(1,2,3)]
-
-
-## ggplot
-
-yeast_Y_order <- length(grep('^ordered',yeast_non_pY_disorder[,3]))/(length(grep('disordered',yeast_non_pY_disorder[,3]))+length(grep('^ordered',yeast_non_pY_disorder[,3])))
-yeast_native_Y_order <- length(grep('^ordered',yeast_native_disorder[,3]))/(length(grep('disordered',yeast_native_disorder[,3]))+length(grep('^ordered',yeast_native_disorder[,3])))
-yeast_spurious_Y_order <- length(grep('^ordered',yeast_spurious_disorder[,3]))/(length(grep('disordered',yeast_spurious_disorder[,3]))+length(grep('^ordered',yeast_spurious_disorder[,3])))
-human_non_pY_order <- length(grep('^ordered',human_non_pY_disorder[,3]))/(length(grep('disordered',human_non_pY_disorder[,3]))+length(grep('^ordered',human_non_pY_disorder[,3])))
-human_pY_order <- length(grep('^ordered',human_pY_disorder[,3]))/(length(grep('disordered',human_pY_disorder[,3]))+length(grep('^ordered',human_pY_disorder[,3])))
-
-disorder_plot_vec <- c(yeast_Y_order,yeast_native_Y_order,yeast_spurious_Y_order,human_non_pY_order,human_pY_order)
-df <- data.frame(class=c("Yeast Y", "Yeast native pY", "Yeast spurious pY", 'Human Y', 'Human pY'),
-                order=disorder_plot_vec)
-
-df$class <- factor(df$class, levels = c('Yeast Y','Yeast spurious pY','Yeast native pY','Human Y','Human pY'))
-
-p <- ggplot(df, aes(x=class, y=order, fill = class, width=.75)) + geom_bar(color='black', lwd=1.05, stat='identity') + scale_fill_manual(values = c(rev(cividis(25))[1],rev(cividis(25))[1],rev(cividis(25))[1],colors()[131],colors()[131]))
-
-########
-
-size_vec <- c(length(grep('disordered',yeast_non_pY_disorder[,3]))+length(grep('^ordered',yeast_non_pY_disorder[,3])),length(grep('disordered',yeast_spurious_disorder[,3]))+length(grep('^ordered',yeast_spurious_disorder[,3])),length(grep('disordered',yeast_native_disorder[,3]))+length(grep('^ordered',yeast_native_disorder[,3])),length(grep('disordered',human_non_pY_disorder[,3]))+length(grep('^ordered',human_non_pY_disorder[,3])),length(grep('disordered',human_pY_disorder[,3]))+length(grep('^ordered',human_pY_disorder[,3])))
-
-# Font
-p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
-
-# Ticks
-p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
-
-p <- p + ylab("% ordered") + xlab("") + ggtitle('')
-#p <- p + theme(axis.title.y = element_text(vjust=-1.5))
-p <- p+theme(axis.text=element_text(size=7),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=11,face="plain"),plot.title=element_text(size=18,face='bold'))
-p <- p+theme(plot.title = element_text(hjust = 0.5))
-p <- p + theme(legend.position = "none") # axis.line = element_blank(), panel.border = element_blank())
-p <- p+geom_text(data=data.frame(), aes(x=c(1:5), y=rep(1,5)), label=size_vec,col=colors()[190], fontface='plain', size=3.0, inherit.aes = FALSE)
-
-ggsave(file='/home/david/Documents/Work/HFSP_2022_yeast_non-pY/psite_disorder.pdf', plot=p, width=5, height=4.0)
-
-```
-
-# RSA
-
-```{r}
-
-# Yeast spurious pY
-
-library(readr)
-
-master_files <- list.files('/home/david/Documents/Work/HFSP_2022/master_files')
-
-master_file_df <- NULL
-
-for (i in 1:length(master_files)) {
-  
-  master_file <- read.csv(paste('/home/david/Documents/Work/HFSP_2022/master_files/',master_files[i],sep=''),stringsAsFactors = F)
-  #master_file <- master_file[!master_file$imputed,]
-  master_file <- master_file[,c(5,6,10)]
-  master_file_df <- rbind(master_file_df,master_file)
-  
-}
-
-yeast_spurious_disorder <- unique(master_file_df)
-
-# Yeast native
-
-yeast_native_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_native_pY/native_RSA_disorder.txt',stringsAsFactors = F)
-yeast_native_disorder <- yeast_native_disorder[,c(1,2,3)]
-
-# Yeast non_pY
-
-yeast_non_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_yeast_non-pY/yeast_non-pY_RSA_disorder.txt',head=T, stringsAsFactors = F)
-yeast_non_pY_disorder <- yeast_non_pY_disorder[,c(1,2,3)]
-
-# Human pY
-
-human_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_human_pY/human_RSA_disorder_ochoa_psp_5.txt',head=T, stringsAsFactors = F)
-human_pY_disorder <- human_pY_disorder[,c(1,2,4)]
-
-# Human non pY
-
-human_non_pY_disorder <- read.table('/home/david/Documents/Work/HFSP_2022_human_non-pY/human_non-pY_RSA_disorder.txt',head=T, stringsAsFactors = F)
-human_non_pY_disorder <- human_non_pY_disorder[,c(3,2,1)]
-
-## ggplot
-
-yeast_Y_order <- data.frame(rep('yeast Y',nrow(yeast_non_pY_disorder)),as.numeric(yeast_non_pY_disorder[,3]))
-yeast_Y_order <- yeast_Y_order[!is.na(yeast_Y_order[,2]),]
-colnames(yeast_Y_order) <- c('class','RSA')
-
-yeast_spurious_Y_order <- data.frame(rep('yeast spurious pY',nrow(yeast_spurious_disorder)),as.numeric(yeast_spurious_disorder[,3]))
-yeast_spurious_Y_order <- yeast_spurious_Y_order[!is.na(yeast_spurious_Y_order[,2]),]
-colnames(yeast_spurious_Y_order) <- c('class','RSA')
-
-yeast_native_Y_order <- data.frame(rep('yeast native pY',nrow(yeast_native_disorder)),as.numeric(yeast_native_disorder[,3]))
-yeast_native_Y_order <- yeast_native_Y_order[!is.na(yeast_native_Y_order[,2]),]
-colnames(yeast_native_Y_order) <- c('class','RSA')
-
-human_non_pY_order <- data.frame(rep('human Y',nrow(human_non_pY_disorder)),as.numeric(human_non_pY_disorder[,3]))
-human_non_pY_order <- human_non_pY_order[!is.na(human_non_pY_order[,2]),]
-colnames(human_non_pY_order) <- c('class','RSA')
-
-human_pY_order <- data.frame(rep('human pY',nrow(human_pY_disorder)),as.numeric(human_pY_disorder[,3]))
-human_pY_order <- human_pY_order[!is.na(human_pY_order[,2]),]
-colnames(human_pY_order) <- c('class','RSA')
-
-RSA_df <- rbind(yeast_Y_order,yeast_spurious_Y_order,yeast_native_Y_order,human_non_pY_order,human_pY_order)
-colnames(RSA_df) <- c('class','RSA')
-
-RSA_df$class <- factor(RSA_df$class, levels = c('yeast Y','yeast spurious pY','yeast native pY','human Y','human pY'))
-
-size_vec <- c(nrow(yeast_Y_order),nrow(yeast_spurious_Y_order),nrow(yeast_native_Y_order),nrow(human_non_pY_order),nrow(human_pY_order))
-
-## ggplot
-
-median.quartile <- function(x){
-  out <- quantile(x, probs = c(0.25,0.5,0.75))
-  names(out) <- c("ymin","y","ymax")
-  return(out) 
-}
-
-
-p <- ggplot(RSA_df, aes(x=class, y=RSA, fill = class)) + geom_violin(color='black', lwd=1.05) + scale_fill_manual(values = c(rev(cividis(25))[1],rev(cividis(25))[1],rev(cividis(25))[1],colors()[131],colors()[131]))
-
-p <- p +stat_summary(
-    fun.data = median.quartile, color = colors()[180], lwd=0.90)
-
-# Font
-
-p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
-
-# Ticks
-p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
-
-p <- p + ylab("RSA") + xlab("") + ggtitle('')
-#p <- p + theme(axis.title.y = element_text(vjust=-1.5))
-p <- p+theme(axis.text=element_text(size=7),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=11,face="plain"),plot.title=element_text(size=18,face='bold'))
-p <- p+theme(plot.title = element_text(hjust = 0.5))
-p <- p + theme(legend.position = "none") # axis.line = element_blank(), panel.border = element_blank())
-p <- p+geom_text(data=data.frame(), aes(x=c(1:5), y=rep(1.4,5)), label=size_vec,col=colors()[190], fontface='plain', size=3.0, inherit.aes = FALSE)
-
-ggsave(file='/home/david/Documents/Work/HFSP_2022_yeast_non-pY/psite_RSA.pdf', plot=p, width=6, height=5.0)
-
-```
-
-
-
-# Prepare the RepairPDB FoldX files to be used on the server (do it all in one)
-
-```{r}
-
-setwd("~/Documents/Work/HFSP_2022_human_pY/human_unrepaired_PDBs")
-
-PDB_files <- list.files()[grep('.pdb$',list.files())]
-PDB_files <-  substr(PDB_files,1,nchar(PDB_files)-4)
-
-PDB_chunks <- split(PDB_files, ceiling(seq_along(PDB_files)/100))
-
-for (i in 1:length(PDB_chunks)) {
-  
-  SLURM_com <- paste('./SLURM_repair_PDB.sh',PDB_chunks[[i]],10)
-  SLURM_name <- paste('SLURM_repair_AF2_human_',i,'.sh',sep='')
-  writeLines(SLURM_com,con=SLURM_name)
-
-}
-
-# Send files to manitou
-
-setwd("~/Documents/Work/HFSP_2022_human_pY/")
-  
-system(paste0('sshpass -p Gurgurant91 scp ','human_unrepaired_PDBs.zip dabra79@manitou.ibis.ulaval.ca:/home/dabra79/HFSP_2022_vSRC',sep=''))
+ggsave(file='Figure_4i.pdf', plot=p, width=6, height=5.0)
 
 ```
