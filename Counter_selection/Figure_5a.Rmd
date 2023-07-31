@@ -163,6 +163,6 @@ p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=9,fac
 p <- p+theme(legend.position="none")
 p <- p + ylab("Proteome Y (relative frequency)") + xlab("No. of predicted Y kinases") + ggtitle('')
 p <- p + geom_richtext(x = 128, y = 0.0384, label='r<sup>2</sup> = 0.006', check_overlap = TRUE, size=3.0, label.color = NA)
-ggsave(file='Figure_5g.pdf', plot=p, width=4, height=3)
+ggsave(file='Figure_5a.pdf', plot=p, width=4, height=3)
 
 ```
