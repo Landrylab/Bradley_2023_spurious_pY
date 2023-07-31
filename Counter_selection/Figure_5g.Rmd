@@ -1,0 +1,194 @@
+---
+title: "Pelican_ggtree_example"
+author: "David Bradley"
+date: '2023-07-31'
+output: html_document
+---
+
+```{r}
+
+pelican_results <- read.table('all_sites_pY_parameters.txt', head=T)
+pelican_results_pY <- pelican_results[pelican_results[,11] == 'pY',]
+pelican_results_pY <- pelican_results_pY[pelican_results_pY[,10] < 0.01,]
+
+# Order with respect to counter-selection (i.e. more strongly counter-selected sites at the top):
+
+pelican_results_pY_sorted <- pelican_results_pY[order(pelican_results_pY[,8],decreasing=T),]
+
+```
+
+# R find representative sequences and extract their sequence names
+
+```{r}
+
+# intsall the package
+
+#devtools::install_github("davidnipperess/PDcalc",build_vignettes = TRUE)
+
+library(ape)
+library(PDcalc)
+
+# read in the animal-fungal tree for the protein we want to use as an example
+
+tre <- ape::read.tree('YGR103W_50pc_align_trim_80_filter.tre')
+
+# Now we want to sub-sample equally from the fungal tree and from the metazoan tree
+
+fungi_tre <- drop.tip(tre,grep('Metazoa',tre$tip.label))
+metazoa_tre <- drop.tip(tre,grep('Fungi',tre$tip.label))
+
+# The sequences are sampled in a way that maximises phylogenetic diversity between sequences
+
+sub_tre_fungi <- unlist(phyloprunr(fungi_tre, size=11, iterations = 1, trees = F)) # 11 fungal species
+sub_tre_metazoa <- unlist(phyloprunr(metazoa_tre, size=12, iterations = 1, trees = F)) # 12 animal species
+
+sub_tre_fungi <- unlist(strsplit(sub_tre_fungi,split='_Fungi'))
+sub_tre_metazoa <- unlist(strsplit(sub_tre_metazoa,split='_Metazoa'))
+
+# For each of these sequence IDs, fetch the corresponding species
+
+annotated_seq <- seqinr::read.fasta('YGR103W_50pc_align_trim_80_filter.fa', seqtype='AA')
+annotated_seq_id <- rapply(strsplit(names(annotated_seq),split='\\:'),function(x) x[1])
+annotated_seq_species <- rapply(strsplit(names(annotated_seq),split='\\:'), function(x) x[2])
+
+fungal_species <- annotated_seq_species[match(sub_tre_fungi,annotated_seq_id)]
+metazoa_species <- annotated_seq_species[match(sub_tre_metazoa,annotated_seq_id)]
+
+```
+
+# Extract the corresponding substree of the representative species
+
+```{r}
+
+species <- c(paste(sub_tre_fungi,'_Fungi',sep=''),paste(sub_tre_metazoa,'_Metazoa',sep=''))
+subtree <- drop.tip(tre, setdiff(tre$tip.label, species)) # remove all species not part of our representative species
+
+# rename phylogeny tips
+
+tip_label <- subtree$tip.label
+x <- tip_label
+tip_label <- rapply(strsplit(tip_label,split='_Metazoa'),function(x)x[1])
+tip_label <- rapply(strsplit(tip_label,split='_Fungi'),function(x)x[1])
+
+subtree$tip.label <- 
+  annotated_seq_species[match(tip_label,annotated_seq_id)]
+  
+ape::write.tree(subtree,file='YGR103W_subtree.tre')
+
+```
+
+# Extract the corresponding alignment of the representative species
+
+```{r}
+
+seq <- seqinr::read.fasta('YGR103W_50pc_align_trim_80_filter.fa', seqtype='AA')
+
+species_al <- seq[match(species,names(seq))]
+species_al_flank <- lapply(species_al, function(x) x[61:61])
+names(species_al_flank) <- c(fungal_species,metazoa_species)
+
+# Remove sequences that are completely gapped in the alignment
+
+species_al_flank <- species_al_flank[-c(11,20,22)]
+
+seqinr::write.fasta(species_al_flank,names=names(species_al_flank),file='YGR103W_al.fa')
+
+```
+
+# prune subtree to remove gapped species and microsporidian
+
+```{r}
+
+tre <- ape::read.tree('YGR103W_subtree.tre')
+subtree <- drop.tip(tre,c("paramicrosporidium_saccamoebae_gca_002794465","strongyloides_ratti","hymenolepis_microstoma"))
+ape::write.tree(subtree,file='YGR103W_subtree_pruned.tre')
+
+```
+
+# visualise the phylogeny using ggtree
+
+```{r}
+
+library(ggtree)
+library(treeio)
+
+tree <- treeio::read.newick('YGR103W_subtree_pruned_rooted.tre')
+
+# rename the taxa to give a cleaner output
+
+old_tips <- tree$tip.label
+new_tips <- unlist(lapply(strsplit(old_tips,split='_'), function(x) paste(x[c(1,2)],collapse=' ')))
+new_tips <-  gsub('.1','',new_tips)
+new_tips <-  gsub('.2','',new_tips)
+new_tips <-  gsub('.5','',new_tips)
+genus <- rapply(strsplit(new_tips,split=' '),function(x)x[1])
+genus <- paste(toupper(substr(genus,1,1)),'.',sep='')
+species <- rapply(strsplit(new_tips,split=' '),function(x)x[2])
+new_tips <- paste(genus,species)
+
+data <- data.frame(old_tips,new_tips)
+tree <- rename_taxa(tree, data, key = 1, value = 2)
+
+# Tree with tips
+
+p <- ggtree(tree) + geom_tiplab() + geom_treescale()
+
+# Try instead to color branches to separate out the fungal and metazoan clades
+
+one2one <- data[1:10,2]
+
+legend_title <- ''
+
+tree2 <- groupOTU(tree, one2one)
+p3 <- ggtree(tree2, aes(color=group), size=1.25) + geom_tiplab(align=T,size=3.15) + theme(legend.position="bottom") +   #size parameter controls the branch thickness
+    scale_color_manual(legend_title,values=c(colors()[144],colors()[131]),labels=c('Fungi','Metazoa'))
+
+```
+
+# Align to the MSA using ggmsa()
+
+```{r}
+
+library(ggmsa)
+library(Biostrings)
+
+x <- readAAStringSet('YGR103W_al.fa')
+old_tips_2 <- gsub('\\\'','',old_tips)
+seq_nom <- new_tips[match(names(x),old_tips_2)]
+
+names(x) <- seq_nom
+data <- tidy_msa(x)
+
+
+p3_test <- p3+hexpand(.088, direction = 1)+vexpand(0.05) #adjust margins
+
+# Set up the color palette to distinguish Y from non-Y
+
+library(RColorBrewer)
+my_pal <- colorRampPalette(rev(brewer.pal(n = 9, name = "Reds")))
+my_cutstom <- data.frame(names = c(LETTERS[1:26],"-"), 
+                         color = my_pal(27), 
+                         stringsAsFactors = FALSE)
+
+my_cutstom[my_cutstom[,1]=='Y',2] <- '#CCAAFF'
+my_cutstom[my_cutstom[,1]!='Y',2] <- 'white'
+
+p5 <- p3_test + geom_facet(geom = geom_msa, data = data, panel = 'msa', custom_color=my_cutstom, font = "DroidSansMono", char_width=0.5, border='black', linetype = "dotted")+theme(
+  strip.background = element_blank(),
+  strip.text.x = element_blank()
+) 
+
+# Adjust relative widths of MSA and the tree
+
+p6 <- facet_widths(p5,c(0.90,0.1))
+ggsave(file='ggtree_ggmsa_nop7.pdf', plot=p6, width=7, height=6)
+
+```
+
+
+
+
+
+
+
+
