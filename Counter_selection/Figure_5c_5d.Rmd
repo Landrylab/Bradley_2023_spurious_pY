@@ -1,0 +1,664 @@
+---
+title: "Figure 5c-5d"
+author: "David Bradley"
+date: '2023-07-31'
+output: html_document
+---
+
+# Retrieve proteome-wide disorder annotations from MobiDB
+
+```{r}
+
+# Proteome-wide AF2-based disorder annotation data can be retrieved using the MobiDB for the model organisms that they have included in their database.
+# https://mobidb.org/api/download?format=tsv&projection=&proteome=UP000000589&prediction-disorder-alphafold=exists
+
+```
+
+# For each species, load in the real and simulated data for the amino acid deserts. An amino acid desert is defined as a protein where more than half of the length of the
+# protein is devoid of a particular amino acid. The 'real' data corresponds to the perecentage of proteins in that proteome that have an amino acid desert (one percentage for eah amino acid).
+# The percentages in the 'simulated' set are for means across 100 simulated proteomes, where the proteome was simulated while respecting amino acid composition and order/disorder content.
+
+# We calculate for the 'observed-expected' amino acid desert frequencies for each species
+
+```{r}
+
+# S cerevisiae
+
+sc_real <- read.table('sc_desert_experimental.txt')
+AAs <- sc_real[,1]
+sc_real <- sc_real[,-1]
+sc_real <- sc_real*100
+names(sc_real) <- AAs
+
+sc_simulated <- read.table('sc_desert_simulated_mean.txt')
+AAs <- sc_simulated[,1]
+sc_simulated <- sc_simulated[,-1]
+names(sc_simulated) <- AAs
+
+obs_exp_sc <- sc_real-sc_simulated
+
+# S pombe
+
+sp_real <- read.table('sp_desert_experimental.txt')
+AAs <- sp_real[,1]
+sp_real <- sp_real[,-1]
+sp_real <- sp_real*100
+names(sp_real) <- AAs
+
+sp_simulated <- read.table('sp_desert_simulated_mean.txt')
+AAs <- sp_simulated[,1]
+sp_simulated <- sp_simulated[,-1]
+names(sp_simulated) <- AAs
+
+obs_exp_sp <- sp_real-sp_simulated
+
+# U maydis
+
+um_real <- read.table('um_desert_experimental.txt')
+AAs <- um_real[,1]
+um_real <- um_real[,-1]
+um_real <- um_real*100
+names(um_real) <- AAs
+
+um_simulated <- read.table('um_desert_simulated_mean.txt')
+AAs <- um_simulated[,1]
+um_simulated <- um_simulated[,-1]
+names(um_simulated) <- AAs
+
+obs_exp_um <- um_real-um_simulated
+
+# C cinerea
+
+cc_real <- read.table('cc_desert_experimental.txt')
+AAs <- cc_real[,1]
+cc_real <- cc_real[,-1]
+cc_real <- cc_real*100
+names(cc_real) <- AAs
+
+cc_simulated <- read.table('cc_desert_simulated_mean.txt')
+AAs <- cc_simulated[,1]
+cc_simulated <- cc_simulated[,-1]
+names(cc_simulated) <- AAs
+
+obs_exp_cc <- cc_real-cc_simulated
+
+# S punc
+
+spunc_real <- read.table('spunc_desert_experimental.txt')
+AAs <- spunc_real[,1]
+spunc_real <- spunc_real[,-1]
+spunc_real <- spunc_real*100
+names(spunc_real) <- AAs
+
+spunc_simulated <- read.table('spunc_desert_simulated_mean.txt')
+AAs <- spunc_simulated[,1]
+spunc_simulated <- spunc_simulated[,-1]
+names(spunc_simulated) <- AAs
+
+obs_exp_spunc <- spunc_real-spunc_simulated
+
+# A macrogynus
+
+am_real <- read.table('am_desert_experimental.txt')
+AAs <- am_real[,1]
+am_real <- am_real[,-1]
+am_real <- am_real*100
+names(am_real) <- AAs
+
+am_simulated <- read.table('am_desert_simulated_mean.txt')
+AAs <- am_simulated[,1]
+am_simulated <- am_simulated[,-1]
+names(am_simulated) <- AAs
+
+obs_exp_am <- am_real-am_simulated
+
+####
+
+# A queenslandica
+
+aq_real <- read.table('aq_desert_experimental.txt')
+AAs <- aq_real[,1]
+aq_real <- aq_real[,-1]
+aq_real <- aq_real*100
+names(aq_real) <- AAs
+
+aq_simulated <- read.table('aq_desert_simulated_mean.txt')
+AAs <- aq_simulated[,1]
+aq_simulated <- aq_simulated[,-1]
+names(aq_simulated) <- AAs
+
+obs_exp_aq <- aq_real-aq_simulated
+
+# B floridae
+
+bf_real <- read.table('bf_desert_experimental.txt')
+AAs <- bf_real[,1]
+bf_real <- bf_real[,-1]
+bf_real <- bf_real*100
+names(bf_real) <- AAs
+
+bf_simulated <- read.table('bf_desert_simulated_mean.txt')
+AAs <- bf_simulated[,1]
+bf_simulated <- bf_simulated[,-1]
+names(bf_simulated) <- AAs
+
+obs_exp_bf <- bf_real-bf_simulated
+
+# C lupus
+
+cl_real <- read.table('cl_desert_experimental.txt')
+AAs <- cl_real[,1]
+cl_real <- cl_real[,-1]
+cl_real <- cl_real*100
+names(cl_real) <- AAs
+
+cl_simulated <- read.table('cl_desert_simulated_mean.txt')
+AAs <- cl_simulated[,1]
+cl_simulated <- cl_simulated[,-1]
+names(cl_simulated) <- AAs
+
+obs_exp_cl <- cl_real-cl_simulated
+
+# C teleta
+
+ct_real <- read.table('ct_desert_experimental.txt')
+AAs <- ct_real[,1]
+ct_real <- ct_real[,-1]
+ct_real <- ct_real*100
+names(ct_real) <- AAs
+
+ct_simulated <- read.table('ct_desert_simulated_mean.txt')
+AAs <- ct_simulated[,1]
+ct_simulated <- ct_simulated[,-1]
+names(ct_simulated) <- AAs
+
+obs_exp_ct <- ct_real-ct_simulated
+
+# G gallus
+
+gg_real <- read.table('gg_desert_experimental.txt')
+AAs <- gg_real[,1]
+gg_real <- gg_real[,-1]
+gg_real <- gg_real*100
+names(gg_real) <- AAs
+
+gg_simulated <- read.table('gg_desert_simulated_mean.txt')
+AAs <- gg_simulated[,1]
+gg_simulated <- gg_simulated[,-1]
+names(gg_simulated) <- AAs
+
+obs_exp_gg <- gg_real-gg_simulated
+
+# H robusta
+
+hr_real <- read.table('hr_desert_experimental.txt')
+AAs <- hr_real[,1]
+hr_real <- hr_real[,-1]
+hr_real <- hr_real*100
+names(hr_real) <- AAs
+
+hr_simulated <- read.table('hr_desert_simulated_mean.txt')
+AAs <- hr_simulated[,1]
+hr_simulated <- hr_simulated[,-1]
+names(hr_simulated) <- AAs
+
+obs_exp_hr <- hr_real-hr_simulated
+
+# H vulgaris
+
+hv_real <- read.table('hv_desert_experimental.txt')
+AAs <- hv_real[,1]
+hv_real <- hv_real[,-1]
+hv_real <- hv_real*100
+names(hv_real) <- AAs
+
+hv_simulated <- read.table('hv_desert_simulated_mean.txt')
+AAs <- hv_simulated[,1]
+hv_simulated <- hv_simulated[,-1]
+names(hv_simulated) <- AAs
+
+obs_exp_hv <- hv_real-hv_simulated
+
+# I scapularis
+
+is_real <- read.table('is_desert_experimental.txt')
+AAs <- is_real[,1]
+is_real <- is_real[,-1]
+is_real <- is_real*100
+names(is_real) <- AAs
+
+is_simulated <- read.table('is_desert_simulated_mean.txt')
+AAs <- is_simulated[,1]
+is_simulated <- is_simulated[,-1]
+names(is_simulated) <- AAs
+
+obs_exp_is <- is_real-is_simulated
+
+# L gigantea
+
+lg_real <- read.table('lg_desert_experimental.txt')
+AAs <- lg_real[,1]
+lg_real <- lg_real[,-1]
+lg_real <- lg_real*100
+names(lg_real) <- AAs
+
+lg_simulated <- read.table('lg_desert_simulated_mean.txt')
+AAs <- lg_simulated[,1]
+lg_simulated <- lg_simulated[,-1]
+names(lg_simulated) <- AAs
+
+obs_exp_lg <- lg_real-lg_simulated
+
+# L unguis
+
+lu_real <- read.table('lu_desert_experimental.txt')
+AAs <- lu_real[,1]
+lu_real <- lu_real[,-1]
+lu_real <- lu_real*100
+names(lu_real) <- AAs
+
+lu_simulated <- read.table('lu_desert_simulated_mean.txt')
+AAs <- lu_simulated[,1]
+lu_simulated <- lu_simulated[,-1]
+names(lu_simulated) <- AAs
+
+obs_exp_lu <- lu_real-lu_simulated
+
+# M yessoensis
+
+my_real <- read.table('my_desert_experimental.txt')
+AAs <- my_real[,1]
+my_real <- my_real[,-1]
+my_real <- my_real*100
+names(my_real) <- AAs
+
+my_simulated <- read.table('my_desert_simulated_mean.txt')
+AAs <- my_simulated[,1]
+my_simulated <- my_simulated[,-1]
+names(my_simulated) <- AAs
+
+obs_exp_my <- my_real-my_simulated
+
+# N vectensis
+
+nv_real <- read.table('nv_desert_experimental.txt')
+AAs <- nv_real[,1]
+nv_real <- nv_real[,-1]
+nv_real <- nv_real*100
+names(nv_real) <- AAs
+
+nv_simulated <- read.table('nv_desert_simulated_mean.txt')
+AAs <- nv_simulated[,1]
+nv_simulated <- nv_simulated[,-1]
+names(nv_simulated) <- AAs
+
+obs_exp_nv <- nv_real-nv_simulated
+
+# S purpuratus
+
+strongpu_real <- read.table('strongpu_desert_experimental.txt')
+AAs <- strongpu_real[,1]
+strongpu_real <- strongpu_real[,-1]
+strongpu_real <- strongpu_real*100
+names(strongpu_real) <- AAs
+
+strongpu_simulated <- read.table('strongpu_desert_simulated_mean.txt')
+AAs <- strongpu_simulated[,1]
+strongpu_simulated <- strongpu_simulated[,-1]
+names(strongpu_simulated) <- AAs
+
+obs_exp_strongpu <- strongpu_real-strongpu_simulated
+
+# T adhaerans
+
+ta_real <- read.table('ta_desert_experimental.txt')
+AAs <- ta_real[,1]
+ta_real <- ta_real[,-1]
+ta_real <- ta_real*100
+names(ta_real) <- AAs
+
+ta_simulated <- read.table('ta_desert_simulated_mean.txt')
+AAs <- ta_simulated[,1]
+ta_simulated <- ta_simulated[,-1]
+names(ta_simulated) <- AAs
+
+obs_exp_ta <- ta_real-ta_simulated
+
+# X tropicalis
+
+xt_real <- read.table('xt_desert_experimental.txt')
+AAs <- xt_real[,1]
+xt_real <- xt_real[,-1]
+xt_real <- xt_real*100
+names(xt_real) <- AAs
+
+xt_simulated <- read.table('xt_desert_simulated_mean.txt')
+AAs <- xt_simulated[,1]
+xt_simulated <- xt_simulated[,-1]
+names(xt_simulated) <- AAs
+
+obs_exp_xt <- xt_real-xt_simulated
+
+# D melanogaster
+
+dm_real <- read.table('dm_desert_experimental.txt')
+AAs <- dm_real[,1]
+dm_real <- dm_real[,-1]
+dm_real <- dm_real*100
+names(dm_real) <- AAs
+
+dm_simulated <- read.table('dm_desert_simulated_mean.txt')
+AAs <- dm_simulated[,1]
+dm_simulated <- dm_simulated[,-1]
+names(dm_simulated) <- AAs
+
+obs_exp_dm <- dm_real-dm_simulated
+
+# C elegans
+
+ce_real <- read.table('ce_desert_experimental.txt')
+AAs <- ce_real[,1]
+ce_real <- ce_real[,-1]
+ce_real <- ce_real*100
+names(ce_real) <- AAs
+
+ce_simulated <- read.table('ce_desert_simulated_mean.txt')
+AAs <- ce_simulated[,1]
+ce_simulated <- ce_simulated[,-1]
+names(ce_simulated) <- AAs
+
+obs_exp_ce <- ce_real-ce_simulated
+
+# D rerio
+
+dr_real <- read.table('r_desert_experimental.txt')
+AAs <- dr_real[,1]
+dr_real <- dr_real[,-1]
+dr_real <- dr_real*100
+names(dr_real) <- AAs
+
+dr_simulated <- read.table('dr_desert_simulated_mean_2.txt')
+AAs <- dr_simulated[,1]
+dr_simulated <- dr_simulated[,-1]
+names(dr_simulated) <- AAs
+
+obs_exp_dr_2 <- dr_real-dr_simulated
+
+# M Musculus
+
+mm_real <- read.table('mm_desert_experimental.txt')
+AAs <- mm_real[,1]
+mm_real <- mm_real[,-1]
+mm_real <- mm_real*100
+names(mm_real) <- AAs
+
+mm_simulated <- read.table('mm_desert_simulated_mean.txt')
+AAs <- mm_simulated[,1]
+mm_simulated <- mm_simulated[,-1]
+names(mm_simulated) <- AAs
+
+obs_exp_mm <- mm_real-mm_simulated
+
+# R norvegicus
+
+rn_real <- read.table('rn_desert_experimental.txt')
+AAs <- rn_real[,1]
+rn_real <- rn_real[,-1]
+rn_real <- rn_real*100
+names(rn_real) <- AAs
+
+rn_simulated <- read.table('rn_desert_simulated_mean.txt')
+AAs <- rn_simulated[,1]
+rn_simulated <- rn_simulated[,-1]
+names(rn_simulated) <- AAs
+
+obs_exp_rn <- rn_real-rn_simulated
+
+# H sapiens
+
+hs_real <- read.table('hs_desert_experimental.txt')
+AAs <- hs_real[,1]
+hs_real <- hs_real[,-1]
+hs_real <- hs_real*100
+names(hs_real) <- AAs
+
+hs_simulated <- read.table('hs_desert_simulated_mean.txt')
+AAs <- hs_simulated[,1]
+hs_simulated <- hs_simulated[,-1]
+names(hs_simulated) <- AAs
+
+obs_exp_hs <- hs_real-hs_simulated
+
+
+### df
+
+desert_df <- rbind(obs_exp_sc,obs_exp_sp,obs_exp_um,obs_exp_cc, obs_exp_spunc,  obs_exp_am, obs_exp_aq, obs_exp_bf, obs_exp_cl, obs_exp_ct, obs_exp_gg, obs_exp_hr, obs_exp_hv, obs_exp_is, obs_exp_lg, obs_exp_lu, obs_exp_my, obs_exp_nv, obs_exp_strongpu, obs_exp_ta, obs_exp_xt, obs_exp_dm, obs_exp_ce,obs_exp_dr_2,obs_exp_mm,obs_exp_rn,obs_exp_hs)
+rownames(desert_df) <- c('S. cerevisiae', 'S. pombe', 'U. maydis', 'C. cinerea', 'S. punctatus', 'A. macrogynus', 'A. queenslandica', 'B. floridae', 'C. lupus', 'C. teleta', 'G. gallus', 'H. robusta', 'H. vulgaris', 'I. scapularis', 'L. gigantea', 'L. unguis', 'M. yessoensis', 'N. vectensis', 'S. purpuratus', 'T. adhaerans',  'X. tropicalis', 'D. melanogaster', 'C. elegans', 'D. rerio', 'M. musculus', 'R. norvegicus', 'H. sapiens')
+
+## Write out to file
+
+write.csv(desert_df,'desert_df_all.csv',quote=F)
+
+```
+
+# Correlation between number of predicted tyrosine kinases and 'observed - expected' percentage of tyrosine deserts
+
+```{r}
+
+library(ggplot2)
+
+desert_TKs <- c(0,0,0,0,0,0,148,145,117,55,101,79,95,25,45,100,52,51,67,20,99,32,77,121,90) # Number of tyrosine kinases for each species
+
+plot(desert_TKs,desert_df[c(1:24,27),20]) # do not include mouse and rat because these species were not used for the Figure 5a and Figure 5b analysis
+
+# Data frame of the tyrosine deserts (observed - expected) against the predicted number of tyrosine kinases for each species, with annotations for animals and animals
+
+desert_plot_df <- data.frame(desert_TKs,desert_df[c(1:24,27),20]) # do not include mouse and rat because these species were not used for the Figure 5a and Figure 5b analysis
+desert_plot_df <- data.frame(desert_plot_df,c(rep('Fungi',6),rep('Metazoa',19)))
+colnames(desert_plot_df) <- c('TKs','desert','taxonomy')
+
+# Fungal and metazoa data frames
+desert_plot_df_fungi <- desert_plot_df[1:6,]
+desert_plot_df_metazoa <- desert_plot_df[7:25,]
+
+## ggplot (fungi in yellow and animals in blue)
+
+library(ggtext)
+
+desert_plot_df_1 <- desert_plot_df
+
+p <- ggplot(desert_plot_df_1, aes(x=TKs, y=desert, fill=taxonomy)) + geom_point(shape=21,stroke=1,size=5.1)
+p <- p+theme_bw()
+p <- p+scale_fill_manual(values=c(colors()[142],colors()[131]))
+p <- p+theme(legend.position = 'none')
+p <- p+xlab('No. of predicted Y kinases')+ylab('Y desert % \n(observed - expected)')
+p <- p + theme(panel.border = element_rect(color = NA))
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=13.1,face="plain"),axis.title.y=element_text(size=13.1,face="plain"))
+p <- p + geom_richtext(data=data.frame(x = 124, y = 6.5, label='r<sup>2</sup> = 0.003'), aes(x = x, y = y, label = label), size=5.0, check_overlap=T, label.color = NA, fill=NA, inherit.aes = T)
+ggsave(p,file='Figure_5d_top.svg',width=3.1,height=2.2)
+
+p1 <- p
+
+# write out the data to file
+
+write.table(desert_plot_df_1,'Figure_5d_top.txt',col.names=T,row.names=T,quote=F)
+write.csv(desert_plot_df_1,'Figure_5d_top.csv',col.names=T,row.names=T,quote=F)
+
+```
+
+# Same analysis as before but this time, instead of taking the absolute number of Y kinases, we take the number of Y kinases as a fraction of the total number of kinases
+# in the kinome.
+
+```{r}
+
+setwd("~/Documents/Work/HFSP_proteomes/metazoan_proteomes")
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+TK_num_vec <- NULL
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  tag <- metazoa_names[i]
+  proteome <- metazoa_genomes[i]
+  
+  tag_proteome <- paste(tag,proteome,sep='/')
+  tag_proteome <- gsub('.gz','.names',tag_proteome)
+  
+  kin_list <- read.table(tag_proteome) 
+  kin_class <- rapply(strsplit(kin_list[,2],split='/'), function(x)x[1])
+  TK_num <- length(which(kin_class == 'TK'))/nrow(kin_list) #normalise by the total number of kinases
+  TK_num_vec <- c(TK_num_vec, TK_num)
+  
+}
+
+# Add the 6 fungal specoes
+
+names(TK_num_vec) <- metazoa_names
+TK_num_vec <- c(0,0,0,0,0,0,TK_num_vec)
+names(TK_num_vec)[1:6] <- fungi_names
+
+```
+
+# Correlation analysis (kinases as a fraction of kinome)
+
+```{r}
+
+library(ggplot2)
+
+desert_TKs <- c(0,0,0,0,0,0,0.265,0.3208,0.195,0.1603,0.218,0.18203,0.266,0.140,0.145,0.212,0.1576,0.173,0.168,0.087,0.134,0.139,0.188,0.135,0.1829)
+
+desert_plot_df <- data.frame(desert_TKs,desert_df[c(1:24,27),20]) # do not include mouse and rat because these species were not used for the Figure 5a and Figure 5b analysis
+desert_plot_df <- data.frame(desert_plot_df,c(rep('Fungi',6),rep('Metazoa',19)))
+colnames(desert_plot_df) <- c('TKs','desert','taxonomy')
+
+desert_plot_df_fungi <- desert_plot_df[1:6,]
+desert_plot_df_metazoa <- desert_plot_df[7:25,]
+
+library(ggtext)
+
+desert_plot_df_2 <- desert_plot_df
+
+p <- ggplot(desert_plot_df_2, aes(x=TKs, y=desert, fill=taxonomy)) + geom_point(shape=21,stroke=1,size=5.1)
+p <- p+theme_bw()
+p <- p+scale_fill_manual(values=c(colors()[142],colors()[131]))
+p <- p+theme(legend.position = 'none')
+p <- p+xlab('Y kinome fraction')+ylab('Y desert % \n(observed - expected)')
+p <- p + theme(panel.border = element_rect(color = NA))
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=13.1,face="plain"),axis.title.y=element_text(size=13.1,face="plain"))
+p <- p + geom_richtext(data=data.frame(x = 0.28, y = 6.5, label='r<sup>2</sup> = 0.056'), aes(x = x, y = y, label = label), size=5.0, check_overlap=T, label.color = NA, fill=NA, inherit.aes = T)
+ggsave(p,file='Figure_5d_bottom.svg',width=3.1,height=2.2)
+
+p2 <- p
+
+# write out the data to file
+
+write.table(desert_plot_df_2,'Figure_5d_bottom.txt',col.names=T,row.names=T,quote=F)
+write.csv(desert_plot_df_2,'Figure_5d_bottom.csv',col.names=T,row.names=T,quote=F)
+
+```
+
+# assemble the two panels together in CowPlot
+
+```{r}
+
+library(cowplot)
+
+p3 <- plot_grid(p1, p2,nrow=2)
+
+ggsave(p3,file='Figure_5d.pdf',width=3.8,height=5.25)
+
+```
+
+# Use the ComplexHeatmaps package to generate the heatmap of the amino acid deserts
+
+```{r}
+
+library(ComplexHeatmap)
+library(circlize)
+
+# Assemble the fungal and animal deserts separately
+
+fungi_desert_df <-  desert_df[c(1,2,3,4,5,6),]
+
+metazoa_desert_df <- desert_df[c(7:27),]
+  
+# Put the heatmaps in phylogenetic order
+
+metazoa_desert_df <- metazoa_desert_df[c(1,12,14,8,16,17,4,6,10,11,9,13,2,18,15,5,3,21),]
+fungi_desert_df <- fungi_desert_df[c(6,5,4,3,2,1),]
+
+# Metazoa heatmap
+
+Heatmap(metazoa_desert_df,cluster_columns=F,cluster_rows=F,col=colorRamp2(c(0, 15), c('white',colors()[131])), 
+        row_names_side='left',
+        width=unit(12,'cm'),
+        height=unit(6.5,'cm'),
+        border=TRUE,
+        row_title='',
+        row_title_gp=gpar(fontsize = 13),
+        row_names_rot=0,
+        row_names_centered=TRUE,
+        row_names_gp=gpar(fontsize = 7.8),
+
+        show_column_names=TRUE,
+        column_title='',
+        column_title_side='bottom',
+        column_title_gp=gpar(fontsize = 13),
+        column_names_gp=gpar(fontsize=8.0),
+        column_names_rot = 0,
+        rect_gp=(gpar(lwd=0.9, fontfamily='mono')), 
+       
+   heatmap_legend_param = list(
+    at = c(0.0,15),
+    labels = c("0", "15"),
+    title = "observed - expected (%)",
+    legend_height = unit(1.5, "cm"),
+    legend_width = unit(1, "cm"),
+    border='black',
+    lwd=1.7,
+    title_position = "leftcenter-rot",
+    title_gp = gpar(fontsize = 9.0, fontface='bold')
+))
+
+
+# Fungi heatmap
+
+Heatmap(fungi_desert_df,cluster_columns=F,cluster_rows=F,col=colorRamp2(c(0, 15), c('white',colors()[142])), 
+        row_names_side='left',
+        width=unit(15.5,'cm'),
+        height=unit(3,'cm'),
+        border=TRUE,
+        row_title='',
+        row_title_gp=gpar(fontsize = 16),
+        row_names_rot=0,
+        row_names_centered=TRUE,
+        row_names_gp=gpar(fontsize = 11),
+
+            
+        show_column_names=TRUE,
+        column_title='',
+        column_title_side='bottom',
+        column_title_gp=gpar(fontsize = 16),
+        column_names_gp=gpar(fontsize=11),
+        column_names_rot = 0,
+        rect_gp=(gpar(lwd=0.9, fontfamily='mono')), 
+       
+   heatmap_legend_param = list(
+    at = c(0.0,15),
+    labels = c("0", "15"),
+    title = "observed - expected (%)",
+    legend_height = unit(1.5, "cm"),
+    legend_width = unit(1, "cm"),
+    border='black',
+    lwd=1.7,
+    title_position = "leftcenter-rot",
+    title_gp = gpar(fontsize = 12.0, fontface='bold')
+))
+
+# Assemble the heatmaps together and add the silhouettes in Inkscape
+
+```
