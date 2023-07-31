@@ -165,4 +165,10 @@ p <- p + ylab("Proteome Y (relative frequency)") + xlab("No. of predicted Y kina
 p <- p + geom_richtext(x = 128, y = 0.0384, label='r<sup>2</sup> = 0.006', check_overlap = TRUE, size=3.0, label.color = NA)
 ggsave(file='Figure_5a.pdf', plot=p, width=4, height=3)
 
+# write out the table
+
+write.table(reg_df,'Figure_5a.txt',col.names=T,row.names=T,quote=F)
+write.csv(reg_df,'Figure_5a.csv',col.names=T,row.names=T,quote=F)
+
+
 ```
