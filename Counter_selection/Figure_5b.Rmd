@@ -1,0 +1,426 @@
+---
+title: "Figure_5b"
+author: "David Bradley"
+date: '2023-07-31'
+output: html_document
+---
+
+```{r}
+
+# Run Kinannote on all of the proteomes
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  tag <- metazoa_names[i]
+  
+  mkdir_command <- paste('mkdir',tag)
+  system(mkdir_command)
+  
+  proteome <- metazoa_genomes[i]
+  
+  perl_com <- paste('perl Kinannote_1.0.pl -m -c',tag,proteome)
+  system(perl_com)
+  
+  tag_files <- list.files()[grep(tag,list.files())]
+  tag_files <- setdiff(tag_files,proteome)
+  
+  mv_com <- paste('mv',tag_files,tag)
+  
+  for (j in 1:length(mv_com)) {
+    system(mv_com[j])
+  }
+  
+}
+
+```
+
+# Retrieve the number of tyrosine kinases for each proteome
+
+```{r}
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+TK_num_vec <- NULL
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  tag <- metazoa_names[i]
+  proteome <- metazoa_genomes[i]
+  
+  tag_proteome <- paste(tag,proteome,sep='/')
+  tag_proteome <- gsub('.gz','.names',tag_proteome)
+  
+  kin_list <- read.table(tag_proteome) 
+  kin_class <- rapply(strsplit(kin_list[,2],split='/'), function(x)x[1])
+  TK_num <- length(which(kin_class == 'TK'))
+  TK_num_vec <- c(TK_num_vec, TK_num)
+  
+}
+
+# Add the 6 fungal species (with a zero because they do no have tyrosine kinases)
+
+names(TK_num_vec) <- metazoa_names
+TK_num_vec <- c(0,0,0,0,0,0,TK_num_vec)
+
+```
+
+# Y content of fungal genomes (buried)
+
+```{r}
+
+fungi_proteomes <- list.files('~/Documents/Work/HFSP_proteomes/fungi_proteomes')
+fungi_proteomes <- fungi_proteomes[grep('.gz',fungi_proteomes)] # proteome file for each fungal species
+fungi_names <- rapply(strsplit(fungi_proteomes,split='_'), function(x) x[1])
+
+fungi_names <- c('amacrogynus','ccinerea','spunc','umaydis','spombe','scerevisiae')
+
+##
+
+# Use the AF2-based RSA/disorder prediction files to calculate the aa content specifically for buried regions
+
+aa_freqs_buried_df <- NULL
+
+for (i in 1:length(fungi_names)) {
+  
+  disorder_path <- paste('/home/david/Documents/Work/HFSP_tyrosine_desert/',fungi_names[i],'_bespoke/disorder_predictions',sep='')
+  disorder_files <- list.files(disorder_path, full.names=T)
+  disorder_files <- disorder_files[grep('data.tsv',disorder_files)]
+  
+  aa_list <- NULL
+  
+  for(j in 1:length(disorder_files)) {
+    
+    disorder_tab <- read.table(disorder_files[j],head=T)
+    disorder_tab <- disorder_tab[disorder_tab[,6] < 0.2,] # 20% RSA threshold for buried content prediction
+    aas <- disorder_tab[,3]
+    aa_list <- c(aa_list,list(aas))
+    
+  }
+  
+  aa_freqs <- table(unlist(aa_list))/sum(table(unlist(aa_list)))
+  
+  aa_freqs_buried_df <- rbind(aa_freqs_buried_df, aa_freqs)
+  
+}
+
+rownames(aa_freqs_buried_df) <- fungi_names
+
+aa_freqs_buried_df_fungi <- aa_freqs_buried_df
+
+```
+
+# Y content of metazoa genomes
+
+```{r}
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+# No AF2 structures for Acanthaster planci
+
+metazoa_names <- c('aqueenslandica','bfloridae','celegans','clupus','cteleta','dmelanogaster','drerio','ggallus','hrobusta','hsapiens','hvulgaris','iscapularis','lgigantea','lunguis','myessoensis','nvectensis','strongpu','tadhaerans','xtropicalis')
+
+# Use the AF2-based RSA/disorder prediction files to calculate the aa content specifically for buried regions
+
+aa_freqs_buried_df <- NULL
+
+for (i in 1:length(metazoa_names)) {
+  
+  print(i)
+  
+  disorder_path <- paste('/home/david/Documents/Work/HFSP_tyrosine_desert/',metazoa_names[i],'_bespoke/disorder_predictions',sep='')
+  disorder_files <- list.files(disorder_path, full.names=T)
+  disorder_files <- disorder_files[grep('data.tsv',disorder_files)]
+  
+  aa_list <- NULL
+  
+  for(j in 1:length(disorder_files)) {
+    
+    disorder_tab <- read.table(disorder_files[j],head=T)
+    disorder_tab <- disorder_tab[disorder_tab[,6] < 0.2,] # 20% RSA threshold for buried content prediction
+    aas <- disorder_tab[,3]
+    aa_list <- c(aa_list,list(aas))
+    
+  }
+  
+  aa_freqs <- table(unlist(aa_list))/sum(table(unlist(aa_list)))
+  
+  aa_freqs_buried_df <- rbind(aa_freqs_buried_df, aa_freqs)
+  
+}
+
+rownames(aa_freqs_buried_df) <- metazoa_names
+
+aa_freqs_buried_df_metazoa <- aa_freqs_buried_df
+
+```
+
+# Perform Phylogenetic Independence Contrasts for the buried regions
+
+```{r}
+
+# Remove A. planci because we have almost no structural representation for this species, and A. steineri because the two different rotifer species give very different results from each other
+
+TK_num_vec <- TK_num_vec[-c(7,9)]
+
+# Combine aa frequencies for buried residues for fungal and metazoan species
+
+aa_freqs_buried_df <- rbind(aa_freqs_buried_df_fungi,aa_freqs_buried_df_metazoa)
+
+# Performing the PIC analysis is surprisingly easy. Data: 
+
+TK_num_vec <- TK_num_vec # explanatory variable
+Y_freq_vec <- aa_freqs_buried_df[,20] # response variable
+
+# Remove the Hydra species because we do not have its orthology data in Ensembl comara and so this species could not be included in the species tree (which is required for phylogenetics independent contrasts).
+
+TK_num_vec <- TK_num_vec[names(TK_num_vec) != 'HVulgaris']
+Y_freq_vec <- Y_freq_vec[names(Y_freq_vec) != 'hvulgaris']
+
+# Use the full species names so that we can match the data to the tree
+
+spec_nom <- c('allomyces_macrogynus','coprinopsis_cinerea','spizellomyces_punctatus','ustilago_maydis','schizosaccharomyces_pombe','saccharomyces_cerevisiae','amphimedon_queenslandica','branchiostoma_lanceolatum', 'caenorhabditis_elegans','canis_lupus','capitella_teleta','drosophila_melanogaster','danio_rerio','gallus_gallus','helobdella_robusta',
+                        'homo_sapiens','ixodes_scapularis','lottia_gigantea','lingula_anatina','mizuhopecten_yessoensis',
+                        'nematostella_vectensis','strongylocentrotus_purpuratus','trichoplax_adhaerens','xenopus_tropicalis')
+
+names(TK_num_vec) <- spec_nom
+names(Y_freq_vec) <- spec_nom
+
+## Read in the species tree and then prune it to remove A. planci (for which we do not have the required structural data)
+
+tre <- ape::read.tree('concat_rooted.treefile')
+tre <- ape::drop.tip(tre, 'acanthaster_planci')
+ape::write.tree(tre, file='concat_rooted_sans_ap.treefile')
+
+tre <- ape::read.tree('concat_rooted_sans_ap.treefile')  # Load in tree with A. planci pruned out
+
+# PIC (for the buried regions)
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+cor.test(tk_pic,y_pic)
+
+# No correlation
+
+library(ggtext)
+
+pic_df_buried <- data.frame(tk_pic,y_pic)
+pic_df <- pic_df_buried
+colnames(pic_df) <- c('TK','Y')
+
+p <- ggplot(pic_df, aes(x=TK, y=Y)) + geom_point(fill='black', stroke=0.001, shape=21, alpha=1, size=4, colour='transparent') 
+p <- p+geom_smooth(method=lm, se=FALSE, col='red', lwd=0.6)
+p <- p+theme_bw() 
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=11,face="bold"),axis.title.y=element_text(size=11,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p + xlab('Y kinase contrasts') + ylab('Y content contrasts') + ggtitle('')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.title=element_text(size=8.5),legend.text = element_text(size=10))
+p <- p + geom_richtext(x = 42, y = 0.0023, label = 'r^2 = 0.0047', check_overlap = TRUE, size=4.0, label.color = NA)
+
+ggsave(file='Figure_5b_buried.pdf', plot=p, width=3.0, height=3.0)
+
+# write out the table
+
+write.table(pic_df,'Figure_5b_buried.txt',col.names=T,row.names=T,quote=F)
+write.csv(pic_df,'Figure_5b_buried.csv',col.names=T,row.names=T,quote=F)
+write.table(Y_freq_vec,'Y_frequencies_buried.txt',col.names=F,row.names=T,quote=F)
+write.csv(Y_freq_vec,'Y_frequencies_buried.csv',col.names=F,row.names=T,quote=F)
+
+```
+
+# Repeat all of the analysis in the above sections but this time with respect to Y residues in surface regions
+
+```{r}
+
+fungi_proteomes <- list.files('~/Documents/Work/HFSP_proteomes/fungi_proteomes')
+fungi_proteomes <- fungi_proteomes[grep('.gz',fungi_proteomes)] # Proteome files for all of the fungal species
+fungi_names <- rapply(strsplit(fungi_proteomes,split='_'), function(x) x[1])
+
+fungi_names <- c('amacrogynus','ccinerea','spunc','umaydis','spombe','scerevisiae')
+
+# Use the AF2-based RSA/disorder prediction files to calculate the aa content specifically for surface regions
+
+aa_freqs_surface_df <- NULL
+
+for (i in 1:length(fungi_names)) {
+  
+  disorder_path <- paste('/home/david/Documents/Work/HFSP_tyrosine_desert/',fungi_names[i],'_bespoke/disorder_predictions',sep='')
+  disorder_files <- list.files(disorder_path, full.names=T)
+  disorder_files <- disorder_files[grep('data.tsv',disorder_files)]
+  
+  aa_list <- NULL
+  
+  for(j in 1:length(disorder_files)) {
+    
+    disorder_tab <- read.table(disorder_files[j],head=T)
+    disorder_tab <- disorder_tab[disorder_tab[,6] > 0.4,] # RSA threshold for surface content prediction
+    aas <- disorder_tab[,3]
+    aa_list <- c(aa_list,list(aas))
+    
+  }
+  
+  aa_freqs <- table(unlist(aa_list))/sum(table(unlist(aa_list)))
+  
+  aa_freqs_surface_df <- rbind(aa_freqs_surface_df, aa_freqs)
+  
+}
+
+rownames(aa_freqs_surface_df) <- fungi_names
+
+aa_freqs_surface_df_fungi <- aa_freqs_surface_df
+
+```
+
+# Y content of metazoa genomes (surface)
+
+```{r}
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+# No AF2 structures for A planci
+
+metazoa_names <- c('aqueenslandica','bfloridae','celegans','clupus','cteleta','dmelanogaster','drerio','ggallus','hrobusta','hsapiens','hvulgaris','iscapularis','lgigantea','lunguis','myessoensis','nvectensis','strongpu','tadhaerans','xtropicalis')
+
+# Use the AF2-based RSA/disorder prediction files to calculate the aa content specifically for surface regions
+
+aa_freqs_surface_df <- NULL
+
+for (i in 1:length(metazoa_names)) {
+  
+  print(i)
+  
+  disorder_path <- paste('/home/david/Documents/Work/HFSP_tyrosine_desert/',metazoa_names[i],'_bespoke/disorder_predictions',sep='')
+  disorder_files <- list.files(disorder_path, full.names=T)
+  disorder_files <- disorder_files[grep('data.tsv',disorder_files)]
+  
+  aa_list <- NULL
+  
+  for(j in 1:length(disorder_files)) {
+    
+    disorder_tab <- read.table(disorder_files[j],head=T)
+    disorder_tab <- disorder_tab[disorder_tab[,6] > 0.4,] # RSA threshold for surface content prediction
+    aas <- disorder_tab[,3]
+    aa_list <- c(aa_list,list(aas))
+    
+  }
+  
+  aa_freqs <- table(unlist(aa_list))/sum(table(unlist(aa_list)))
+  
+  aa_freqs_surface_df <- rbind(aa_freqs_surface_df, aa_freqs)
+  
+}
+
+rownames(aa_freqs_surface_df) <- metazoa_names
+
+aa_freqs_surface_df_metazoa <- aa_freqs_surface_df
+
+```
+
+# Perform Phylogenetic Independence Contrasts (surface)
+
+```{r}
+
+TK_num_vec <- TK_num_vec
+
+# Combine aa freqs for surface residues (from fungal species and anial species)
+
+aa_freqs_surface_df <- rbind(aa_freqs_surface_df_fungi,aa_freqs_surface_df_metazoa)
+
+Y_freq_vec <- aa_freqs_surface_df[,20]
+
+# H. vulgaris has to be removed because it is not present in the species tree (due to absence of H. vulagris homologs in Ensembl)
+Y_freq_vec <- Y_freq_vec[names(Y_freq_vec) != 'hvulgaris'] 
+
+# Data: 
+
+TK_num_vec <- TK_num_vec #x-axis
+Y_freq_vec <- Y_freq_vec #y-axis
+
+# Use the full species names so that we can match the data to the tree
+
+spec_nom <- c('allomyces_macrogynus','coprinopsis_cinerea','spizellomyces_punctatus','ustilago_maydis','schizosaccharomyces_pombe','saccharomyces_cerevisiae','amphimedon_queenslandica','branchiostoma_lanceolatum', 'caenorhabditis_elegans','canis_lupus','capitella_teleta','drosophila_melanogaster','danio_rerio','gallus_gallus','helobdella_robusta',
+                        'homo_sapiens','ixodes_scapularis','lottia_gigantea','lingula_anatina','mizuhopecten_yessoensis',
+                        'nematostella_vectensis','strongylocentrotus_purpuratus','trichoplax_adhaerens','xenopus_tropicalis')
+
+names(TK_num_vec) <- spec_nom
+names(Y_freq_vec) <- spec_nom
+
+# PIC
+
+tre <- ape::read.tree('concat_rooted_sans_ap.treefile')  # Load in species tree with A. planci removed (due to absence of structural data)
+
+# Calculate the contrasts for each one of the variables
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+cor.test(tk_pic,y_pic) # No significant correlation
+
+library(ggtext)
+
+pic_df_surface <- data.frame(tk_pic,y_pic)
+pic_df <- pic_df_surface
+colnames(pic_df) <- c('TK','Y')
+
+p <- ggplot(pic_df, aes(x=TK, y=Y)) + geom_point(fill='black', stroke=0.001, shape=21, alpha=1, size=4, colour='transparent') 
+p <- p+geom_smooth(method=lm, se=FALSE, col='red', lwd=0.6)
+p <- p+theme_bw() 
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=11,face="bold"),axis.title.y=element_text(size=11,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p + xlab('Y kinase contrasts') + ylab('Y content contrasts') + ggtitle('')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.title=element_text(size=8.5),legend.text = element_text(size=10))
+p <- p + geom_richtext(x = 42, y = 0.0023, label = 'r^2 = 0.0002', check_overlap = TRUE, size=4.0, label.color = NA)
+
+ggsave(file='Figure_5b_surface.pdf', plot=p, width=3.0, height=3.0)
+
+## write tables to file
+
+write.table(pic_df,'Figure_5b_surface.txt',col.names=T,row.names=T,quote=F)
+write.csv(pic_df,'Figure_5b_surface.csv',col.names=T,row.names=T,quote=F)
+write.table(Y_freq_vec,'Y_frequencies_surface.txt',col.names=F,row.names=T,quote=F)
+write.csv(Y_freq_vec,'Y_frequencies_surface.csv',col.names=F,row.names=T,quote=F)
+
+```
+
+# Put the two panels together in a facet plot
+
+```{r}
+
+pic_df_buried
+pic_df_surface
+
+pic_df_all <- rbind(pic_df_buried, pic_df_surface)
+pic_df_all <- data.frame(pic_df_all, c(rep('buried',23),rep('surface',23)))
+colnames(pic_df_all) <- c('tk_pic','y_pic','class')
+
+####
+
+p <- ggplot(pic_df_all, aes(x=tk_pic, y=y_pic)) + geom_point(fill='black', stroke=0.001, shape=21, alpha=1, size=4, colour='transparent') + facet_wrap(vars(class))
+p <- p+geom_smooth(method=lm, se=FALSE, col='red', lwd=0.6)
+p <- p+theme_bw() 
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=12,face="bold"),axis.title.y=element_text(size=12,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p + xlab('Y kinase contrasts') + ylab('Proteome Y contrasts') + ggtitle('')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.title=element_text(size=8.5),legend.text = element_text(size=10))
+p <- p+geom_richtext(aes(x, y, label=lab), data=data.frame(x=10.5, y=0.00675, lab=c("r^2 = 0.0047","r^2 = 0.0002"),class=c('buried','surface'), vjust=1), label.color = NA) 
+
+ggsave(file='PIC_buried_surface.pdf', plot=p, width=6.0, height=3.5)
+
+```
