@@ -1,0 +1,168 @@
+---
+title: "Figure_5a"
+author: "David Bradley"
+date: '2023-07-31'
+output: html_document
+---
+
+```{r}
+
+# Run Kinannote on all of the proteomes
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  tag <- metazoa_names[i]
+  
+  mkdir_command <- paste('mkdir',tag)
+  system(mkdir_command)
+  
+  proteome <- metazoa_genomes[i]
+  
+  perl_com <- paste('perl Kinannote_1.0.pl -m -c',tag,proteome) # N.B. The -m tag means 'metazoa' and means that the predictions can include tyrosine kinases
+  system(perl_com)
+  
+  tag_files <- list.files()[grep(tag,list.files())]
+  tag_files <- setdiff(tag_files,proteome)
+  
+  mv_com <- paste('mv',tag_files,tag)
+  
+  for (j in 1:length(mv_com)) {
+    system(mv_com[j])
+  }
+  
+}
+
+```
+
+# Retrive the number of tyrosine kinases for each proteome
+
+```{r}
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+TK_num_vec <- NULL
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  tag <- metazoa_names[i]
+  proteome <- metazoa_genomes[i]
+  
+  tag_proteome <- paste(tag,proteome,sep='/')
+  tag_proteome <- gsub('.gz','.names',tag_proteome)
+  
+  kin_list <- read.table(tag_proteome) 
+  kin_class <- rapply(strsplit(kin_list[,2],split='/'), function(x)x[1])
+  TK_num <- length(which(kin_class == 'TK'))
+  TK_num_vec <- c(TK_num_vec, TK_num)
+  
+}
+
+# Add zeros corresponding to the 6 fungal species (which have no tyrosine kinases)
+
+names(TK_num_vec) <- metazoa_names
+TK_num_vec <- c(0,0,0,0,0,0,TK_num_vec)
+
+```
+
+# Y content of fungal proteomes
+
+```{r}
+
+fungi_proteomes <- list.files('~/Documents/Work/HFSP_proteomes/fungi_proteomes')
+fungi_proteomes <- fungi_proteomes[grep('.gz',fungi_proteomes)]
+fungi_names <- rapply(strsplit(fungi_proteomes,split='_'), function(x) x[1])
+
+Y_freq_vec <- NULL
+
+for (i in 1:length(fungi_proteomes)) {
+  
+  fungi_proteome <- fungi_proteomes[i]
+  
+  fas <- seqinr::read.fasta(fungi_proteome,seqtype='AA')
+  freq_table <- table(unname(unlist(fas)))/sum(table(unname(unlist(fas)))) # relative frequencies for each amino acid
+  freq_Y <- unname(freq_table[names(freq_table) == 'Y'])
+  
+  Y_freq_vec <- c(Y_freq_vec,freq_Y)
+  
+}
+
+names(TK_num_vec)[1:6] <- fungi_names
+names(Y_freq_vec) <- fungi_names
+
+```
+
+# Y content of metazoa genomes
+
+```{r}
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  proteome <- metazoa_genomes[i]
+  
+  fas <- seqinr::read.fasta(proteome,seqtype='AA')
+  freq_table <- table(unname(unlist(fas)))/sum(table(unname(unlist(fas)))) # relative frequencies for each amino acid
+  freq_Y <- unname(freq_table[names(freq_table) == 'Y'])
+  
+  Y_freq_vec <- c(Y_freq_vec,freq_Y)
+  
+}
+
+names(Y_freq_vec)[7:length(Y_freq_vec)] <- metazoa_names
+
+```
+
+# No significant correlation
+
+```{r}
+
+plot(TK_num_vec,Y_freq_vec)
+cor.test(TK_num_vec,Y_freq_vec)
+
+# Cannot use rotifers for this analysis as two different rotifer species give very different results
+plot(TK_num_vec[-9],Y_freq_vec[-9])
+cor.test(TK_num_vec[-9],Y_freq_vec[-9],method='spearman') #corresponds to r-squared of 0.006
+
+## ggplot the results
+
+reg_df <- data.frame(TK_num_vec[-9],Y_freq_vec[-9]) # remove rotifers that have conflicting results between species
+colnames(reg_df) <- c('Kinase','Y')
+
+library(ggrepel)
+library(ggplot2)
+library(ggtext)
+
+row_nom <- rapply(strsplit(rownames(reg_df),split=''), function(x) paste(x[1],paste(x[2:length(x)],collapse='')))
+substr(row_nom,3,3) <- tolower(substr(row_nom,3,3))
+row_nom <- paste(paste(substr(row_nom,1,1),'.',sep=''),rapply(strsplit(row_nom,split=' '), function(x) x[2]))
+row_nom[1] <- 'A. macrogynus' # manually modify species names
+row_nom[25] <- 'T. adhaerans' # manually modify species names
+rownames(reg_df) <- row_nom
+
+fungi_df <- reg_df[1:6,]
+metazoa_df <- reg_df[7:nrow(reg_df),]
+
+p <- ggplot(reg_df, aes(x=Kinase, y=Y)) + geom_point()
+p <- p+geom_label_repel(data=metazoa_df,aes(label = rownames(metazoa_df)),size=1.7, label.size=NA, fill=NA, color=colors()[131])
+p <- p+geom_label_repel(data=fungi_df,aes(label = rownames(fungi_df)),size=1.7, label.size=NA, fill=NA, color=colors()[142])
+p <- p+geom_smooth(method=lm, se=FALSE, col='black', lwd=0.6)
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=9,face="bold"),axis.title.y=element_text(size=9,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(legend.position="none")
+p <- p + ylab("Proteome Y (relative frequency)") + xlab("No. of predicted Y kinases") + ggtitle('')
+p <- p + geom_richtext(x = 128, y = 0.0384, label='r<sup>2</sup> = 0.006', check_overlap = TRUE, size=3.0, label.color = NA)
+ggsave(file='Figure_5g.pdf', plot=p, width=4, height=3)
+
+```
