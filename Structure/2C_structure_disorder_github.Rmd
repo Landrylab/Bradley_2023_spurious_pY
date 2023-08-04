@@ -70,7 +70,7 @@ for (i in 1:length(Y_kinase_sorted)) {
   # Retrieve the kinase gene symbol
   Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
   
-  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='') # specify the path to the master files
   master_file <- read_csv(master_file_path)
   master_file <- data.frame(master_file,stringsAsFactors = F)
   
