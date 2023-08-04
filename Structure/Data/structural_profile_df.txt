@@ -1,0 +1,9 @@
+Label Feature
+ordered 83.3961316252198
+pfam_domain 53.5292640040191
+buried 35.0916855061542
+destabilising_(intra) 19.8944988696307
+interface 13.0118060788747
+destabilising_(inter) 2.16026124089425
+1D_proximal 11.22137
+3D_proximal 3.587786
