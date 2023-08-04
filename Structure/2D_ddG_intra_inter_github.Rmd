@@ -48,7 +48,7 @@ for (i in 1:length(Y_kinase_sorted)) {
   Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
   
   # Retrieve data from the master file that exists for each kinase
-  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='') # specify the path to the directory that contains the master files
   master_file <- read_csv(master_file_path)
   master_file <- data.frame(master_file,stringsAsFactors = F)
   
@@ -107,7 +107,7 @@ for (i in 1:length(Y_kinase_sorted)) {
   Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
   
   # Retrieve data from the master file that exists for each kinase
-  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='') # specify the path to the directory that contains the master files
   master_file <- read_csv(master_file_path)
   master_file <- data.frame(master_file,stringsAsFactors = F)
   
@@ -119,6 +119,7 @@ for (i in 1:length(Y_kinase_sorted)) {
   
   # Retrieve the ddG values
   master_file_ddG <- master_file$ddG_intra
+  
   # Number that are destabilising at a threshold of ddG > 2
   master_file_ddG_destab <- length(which(master_file$ddG_intra >= 2))
   if(length(master_file_ddG_destab) == 0) {master_file_ddG_destab <- 0}
@@ -193,7 +194,7 @@ for (i in 1:length(Y_kinase_sorted)) {
   Y_kinase_tag <- rapply(strsplit(Y_kinase_sorted[i], split=' '), function(x) x[1])
   
   # Retrieve data from the master file that exists for each kinase
-  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='')
+  master_file_path <- paste(Y_kinase_tag,'_master.csv',sep='') # specify the path to the directory that contains the master files
   master_file <- read_csv(master_file_path)
   master_file <- data.frame(master_file,stringsAsFactors = F)
   
