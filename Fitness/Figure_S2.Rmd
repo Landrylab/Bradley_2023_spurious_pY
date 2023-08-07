@@ -1,0 +1,197 @@
+---
+title: "Figure_S2_github"
+author: "David Bradley"
+date: '2023-07-13'
+output: html_document
+---
+
+# GGplot font
+
+```{r}
+
+# https://stackoverflow.com/questions/27689222/changing-fonts-for-graphs-in-r
+
+library(extrafont)
+font_import()
+loadfonts()       #Register fonts for Windows bitmap output
+fonts() 
+
+```
+
+# Retrieve the number of unique upregulated pY per kinase
+
+```{r}
+
+library(tidyverse)
+
+# read in list of kinase conditions (WT vs. dead), sorted in terms of the number of upregulated pY identified by mass spectrometry
+
+Y_kinase_sorted <- read.table('Y_kinase_sorted.txt',sep=' ')
+Y_kinase_sorted <- Y_kinase_sorted[,1]
+
+```
+
+# Load in the fitness data across kinases and conditions
+
+```{r}
+
+# Data from the fitness screen
+
+auc <- read.table('AUC_simps.tsv',sep='\t', head=TRUE, stringsAsFactors = FALSE) 
+auc <- auc[,-1]
+auc_names <- auc[,3]
+auc_names <- gsub('MER domain','MERTK domain',auc_names) # convert synonyms
+
+# Next we need to assign groups (pY, pYd, and vSRC) to each kinase
+
+pY_dex <- which(auc_names %in% c('ABL1','ABL2','BMX','FES','FRK','FYN','LCK','LYN','SRC','SRMS','SYK','TEC','TNK1'))
+pYd_dex <- which(auc_names %in% c('EPHA1 domain','EPHA2 domain','EPHA3 domain','EPHB1 domain','EPHB3 domain','EPHB4 domain','FGFR2 domain','FGFR3 domain','MERTK domain','MET domain'))
+vSRC_dex <- which(auc_names %in% c('vSRC','vSRC L308A','vSRC L317A','vSRC L360A','vSRC L393A','vSRC L435A','vSRC L451A','vSRC L452A','vSRC L491A','vSRC V281A','vSRC V292A','vSRC V329A',
+                                   'vSRC V383A','vSRC V394A'))
+pST_dex <- which(auc_names %in% c('IRAK4','TLK2','NEK6','TBK1','RAF1','NEK7','VRK1'))
+
+```
+
+# construct the data frame
+
+```{r}
+
+group <- rep('Kinase group',length(auc_names))
+group[pY_dex] <- 'pY'
+group[pYd_dex] <- 'pYd'
+group[vSRC_dex] <- 'vSRC'
+group[pST_dex] <- 'pST'
+
+# Take the 16th column corresponding to the AUC difference between the WT and dead mutants (mean difference between replicates)
+auc_wt_dead <- auc[,16]
+
+# The 18th column corresponds to p-value for the difference between the WT and dead AUCs
+pval_wt_dead <- auc[,18]
+pval_wt_dead <- -log(pval_wt_dead,base=10) # -log10 transformation
+
+# construct df for the volcano plot
+volc_df <- data.frame(auc_names,group,auc_wt_dead,pval_wt_dead)
+colnames(volc_df) <- c('Kinase','Group','AUC','pvalue')
+volc_df$Group <- factor(volc_df$Group, levels = c('pY', 'pYd', 'vSRC', 'pST'))
+
+```
+
+# pY ggplot
+
+```{r}
+
+volc_df_Y <- volc_df[volc_df[,2] == 'pY',]
+
+p <- ggplot(volc_df_Y, aes(x=AUC,y=pvalue,color=Group)) + geom_point(size=0.9)
+p <- p + scale_color_manual(values = c(rgb(49/255,104/255,142/255,100/255)))
+p <- p + theme_bw() + theme(text=element_text(family="Ubuntu Light"))
+p <- p + theme(panel.border = element_blank())
+p <- p + coord_cartesian(xlim = c(-6.5, 2.5), ylim=c(0,6), expand = FALSE)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -0.175, yend = 3),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -0.175, y = 3, xend = -0.175, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 6, xend = -0.175, yend = 6),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -6.25, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + xlab('wt-dead (AUC)')+ylab('significance \n (-log10(P))')
+p <- p+theme(axis.text=element_text(size=8.5),axis.title.x=element_text(size=9.5,face="bold"),axis.title.y=element_text(size=13.0,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p+theme(legend.key.size = unit(0.4, 'cm'),
+        legend.key.height = unit(0.4, 'cm'), 
+        legend.key.width = unit(0.4, 'cm'), 
+        legend.title = element_text(size=10, face='bold'), 
+        legend.text = element_text(size=9))
+
+# Add text
+p <- p+geom_text(label='p<0.001 \n 5 kinases \n 180 kinase-conditions',x=-6.15,y=3.75, inherit.aes = F, check_overlap = T, size=3.75, hjust=0)
+ggsave(file='fitness_volcano_pY.pdf', plot=p, width=4.9, height=3.125)
+
+```
+
+# pYd ggplot
+
+```{r}
+
+volc_df_pYd <- volc_df[volc_df[,2] == 'pYd',]
+
+p <- ggplot(volc_df_pYd, aes(x=AUC,y=pvalue,color=Group)) + geom_point(size=0.9)
+p <- p + scale_color_manual(values = c(rgb(53/255,183/255,121/255,156/255)))
+p <- p + theme_bw() + theme(text=element_text(family="Ubuntu Light"))
+p <- p + theme(panel.border = element_blank())
+p <- p + coord_cartesian(xlim = c(-6.5, 2.5), ylim=c(0,6), expand = FALSE)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -0.175, yend = 3),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -0.175, y = 3, xend = -0.175, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 6, xend = -0.175, yend = 6),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -6.25, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + xlab('wt-dead (AUC)')+ylab('significance \n (-log10(P))')
+p <- p+theme(axis.text=element_text(size=8.5),axis.title.x=element_text(size=9.5,face="bold"),axis.title.y=element_text(size=13.0,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p+theme(legend.key.size = unit(0.4, 'cm'),
+        legend.key.height = unit(0.4, 'cm'), 
+        legend.key.width = unit(0.4, 'cm'), 
+        legend.title = element_text(size=10, face='bold'), 
+        legend.text = element_text(size=9))
+
+# Add text
+p <- p+geom_text(label='p<0.001 \n 3 kinases \n 73 kinase-conditions',x=-6.15,y=3.75, inherit.aes = F, check_overlap = T, size=3.75, hjust=0)
+ggsave(file='fitness_volcano_pYd.pdf', plot=p, width=4.9, height=3.125)
+
+```
+
+# vSRC ggplot
+
+```{r}
+
+volc_df_vSRC <- volc_df[volc_df[,2] == 'vSRC',]
+
+p <- ggplot(volc_df_vSRC, aes(x=AUC,y=pvalue,color=Group)) + geom_point(size=0.9)
+p <- p + scale_color_manual(values = c(rgb(253/255,231/255,37/255,156/255)))
+p <- p + theme_bw() + theme(text=element_text(family="Ubuntu Light"))
+p <- p + theme(panel.border = element_blank())
+p <- p + coord_cartesian(xlim = c(-6.5, 2.5), ylim=c(0,6), expand = FALSE)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -0.175, yend = 3),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -0.175, y = 3, xend = -0.175, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 6, xend = -0.175, yend = 6),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -6.25, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + xlab('wt-dead (AUC)')+ylab('significance \n (-log10(P))')
+p <- p+theme(axis.text=element_text(size=8.5),axis.title.x=element_text(size=9.5,face="bold"),axis.title.y=element_text(size=13.0,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p+theme(legend.key.size = unit(0.4, 'cm'),
+        legend.key.height = unit(0.4, 'cm'), 
+        legend.key.width = unit(0.4, 'cm'), 
+        legend.title = element_text(size=10, face='bold'), 
+        legend.text = element_text(size=9))
+
+# Add text
+p <- p+geom_text(label='p<0.001 \n 13 kinases \n 481 kinase-conditions',x=-6.15,y=3.75, inherit.aes = F, check_overlap = T, size=3.75, hjust=0)
+ggsave(file='fitness_volcano_vSRC.pdf', plot=p, width=4.9, height=3.125)
+
+```
+
+# vSRC ggplot
+
+```{r}
+
+volc_df_pST <- volc_df[volc_df[,2] == 'pST',]
+
+p <- ggplot(volc_df_pST, aes(x=AUC,y=pvalue,color=Group)) + geom_point(size=0.9)
+p <- p + scale_color_manual(values = c(rgb(147/255,112/255,219/255,156/255)))
+p <- p + theme_bw() + theme(text=element_text(family="Ubuntu Light"))
+p <- p + theme(panel.border = element_blank())
+p <- p + coord_cartesian(xlim = c(-6.5, 2.5), ylim=c(0,6), expand = FALSE)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -0.175, yend = 3),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -0.175, y = 3, xend = -0.175, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 6, xend = -0.175, yend = 6),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + geom_segment(aes(x = -6.25, y = 3, xend = -6.25, yend = 6.0),colour=colors()[308], lwd=0.35, lty=2)
+p <- p + xlab('wt-dead (AUC)')+ylab('significance \n (-log10(P))')
+p <- p+theme(axis.text=element_text(size=8.5),axis.title.x=element_text(size=9.5,face="bold"),axis.title.y=element_text(size=13.0,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p+theme(legend.key.size = unit(0.4, 'cm'),
+        legend.key.height = unit(0.4, 'cm'), 
+        legend.key.width = unit(0.4, 'cm'), 
+        legend.title = element_text(size=10, face='bold'), 
+        legend.text = element_text(size=9))
+
+# Add text
+p <- p+geom_text(label='p<0.001 \n 3 kinases \n 52 kinase-conditions',x=-6.15,y=3.75, inherit.aes = F, check_overlap = T, size=3.75, hjust=0)
+ggsave(file='fitness_volcano_pST.pdf', plot=p, width=4.9, height=3.125)
+
+```
