@@ -1,0 +1,552 @@
+---
+title: "Figure_3i_S7"
+author: "David Bradley"
+date: "6/20/2022"
+output: html_document
+---
+
+# EPHB1 stoichiometry
+
+```{r}
+
+# Read in the data
+
+alex_h_stoichiometry <- read.csv('data_stoichiometry_export2.csv', stringsAsFactors = F)
+
+# Use a 0.01 q-value threshold for significance of the regression that is used to predict stoichiometry
+
+alex_h_stoichiometry <- alex_h_stoichiometry[as.numeric(alex_h_stoichiometry[,1]) < 0.01,]
+
+# WT kinase only (not interested in the kinase-dead mutant)
+
+alex_h_stoichiometry_EPHB1 <- alex_h_stoichiometry[grep('EPHB1_wt',alex_h_stoichiometry[,4]),]
+
+# phosphopeptides only (not interested in the non-phospo peptides)
+
+alex_h_stoichiometry_EPHB1 <- alex_h_stoichiometry_EPHB1[grep('Y\\(ph\\)',alex_h_stoichiometry_EPHB1[,3]),]
+
+# omit sites with 0 stoichiometry (these correspond to phospho-peptides with non-0 stoichiometry in the other kinase)
+
+alex_h_stoichiometry_EPHB1 <- alex_h_stoichiometry_EPHB1[alex_h_stoichiometry_EPHB1[,8] > 0,]
+
+# average stoichiometry
+
+summary(alex_h_stoichiometry_EPHB1[,8])
+
+# unique psites (around 122 at at a threshold of 0.01)
+ 
+unique(alex_h_stoichiometry_EPHB1[,3])
+
+```
+
+# remove redundant phosphopeptides and take the median stoichiometry (per phosphosite)
+
+```{r}
+
+acc <- alex_h_stoichiometry_EPHB1[,6]
+phospho_peptide <- alex_h_stoichiometry_EPHB1[,3]
+acc_phospho_peptide <- paste(acc,'-',phospho_peptide,sep='')
+acc_phospho_peptide <- unique(acc_phospho_peptide)
+
+#
+
+stoi_data_df <- NULL
+
+for (i in 1:length(acc_phospho_peptide)) {
+  
+  acc <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[1])
+  pep <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[2])
+  
+  stoi_data <- alex_h_stoichiometry_EPHB1[alex_h_stoichiometry_EPHB1[,6] %in% acc & alex_h_stoichiometry_EPHB1[,3] %in% pep,]
+  stoi_data[,8] <- median(stoi_data[,8]) # Take median stoichiometry across the replicate samples
+  
+  # Just take the first row as they all now have the same stoichiometries (i.e. median stoichiometry)
+  
+  stoi_data <- stoi_data[1,]
+  stoi_data_df <- rbind(stoi_data_df,stoi_data)
+  
+}
+
+ephb1_stoi_data_df <- stoi_data_df
+
+```
+
+# vSRC stoichiometry
+
+```{r}
+
+# Read in the data
+
+alex_h_stoichiometry <- read.csv('data_stoichiometry_export2.csv', stringsAsFactors = F)
+
+# Use a 0.01 q-value threshold for significance of the regression that is used to predict stoichiometry
+
+alex_h_stoichiometry <- alex_h_stoichiometry[as.numeric(alex_h_stoichiometry[,1]) < 0.01,]
+
+# WT kinase only (not interested in the kinase-dead mutant)
+
+alex_h_stoichiometry_vSRC <- alex_h_stoichiometry[grep('vSRC_wt',alex_h_stoichiometry[,4]),]
+
+# phosphopeptides only (not interested in the non-phospo peptides)
+
+alex_h_stoichiometry_vSRC <- alex_h_stoichiometry_vSRC[grep('Y\\(ph\\)',alex_h_stoichiometry_vSRC[,3]),]
+
+# omit sites with 0 stoichiometry (These correspond to phospho-peptide with non-0 stoichiometry in the other kinase)
+
+alex_h_stoichiometry_vSRC <- alex_h_stoichiometry_vSRC[alex_h_stoichiometry_vSRC[,8] > 0,]
+
+# average stoichiometry
+
+summary(alex_h_stoichiometry_vSRC[,8])
+
+# unique psites (around 116 at at a threshold of 0.01)
+ 
+unique(alex_h_stoichiometry_vSRC[,3])
+
+```
+
+# remove redundant phosphopeptides and take the median stoichiometry (per phosphopeptide)
+
+```{r}
+
+acc <- alex_h_stoichiometry_vSRC[,6]
+phospho_peptide <- alex_h_stoichiometry_vSRC[,3]
+acc_phospho_peptide <- paste(acc,'-',phospho_peptide,sep='')
+acc_phospho_peptide <- unique(acc_phospho_peptide)
+
+#####
+
+stoi_data_df <- NULL
+
+for (i in 1:length(acc_phospho_peptide)) {
+  
+  acc <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[1])
+  pep <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[2])
+  
+  stoi_data <- alex_h_stoichiometry_vSRC[alex_h_stoichiometry_vSRC[,6] %in% acc & alex_h_stoichiometry_vSRC[,3] %in% pep,]
+  stoi_data[,8] <- median(stoi_data[,8]) # Take median stoichiometry across the replicate samples
+  
+  # Just take the first row as they all now have the same stoichiometries (i.e. median stoichiometry)
+  
+  stoi_data <- stoi_data[1,]
+  stoi_data_df <- rbind(stoi_data_df,stoi_data)
+  
+}
+
+vsrc_stoi_data_df <- stoi_data_df
+
+```
+
+# ddG vs. ddE scatter plot colored by stoichiometry (for EPHB1)
+
+```{r}
+
+ephb1_stoi_data_df
+
+# Need to link the phosphorylated peptide back to the corresponding position in the protein sequence
+
+master_unique_1 <- read.csv('pYd-EPHB1_master_GEMME.csv') # EPHB1 data
+master_unique_peptides_1 <- master_unique_1$peptide_z
+
+# vSRC data for phosphopeptides with very low stoichiometry in EPHB1 but higher stoichiometry in VSRC
+
+master_unique_2a <- read.csv('vSRC-vSRC_master_GEMME.csv') # vSRC data (vSRC batch)
+master_unique_2b <- read.csv('pY-vSRC_master_GEMME.csv') # vSRC data (pY batch)
+master_unique_2 <- rbind(master_unique_2a,master_unique_2b)
+master_unique_2 <- master_unique_2[!duplicated(master_unique_2[,c(5,6,33)]),] # Take all unique entries
+master_unique_peptides_2 <- master_unique_2$peptide_z
+
+######
+
+gg_df <- NULL
+
+for (i in 1:nrow(ephb1_stoi_data_df)) {
+  
+  print(i)
+  
+  # accession and peptide z
+  accession <- ephb1_stoi_data_df[i,6]
+  peptide_group <- ephb1_stoi_data_df[i,2]
+  peptide_z <- ephb1_stoi_data_df[i,3]
+  stoichiometry <- ephb1_stoi_data_df[i,8]
+  
+  # manual intervention for the rare cases where the peptide cannot easily mapped to an entry in the speadsheet
+  
+  if(i==21) {
+    
+    accession <- accession
+    pos <- 43
+    peptide_z <- peptide_z
+    ddG <- 0.0018
+    ddE <- 0.252   
+    stoichiometry <- stoichiometry
+    gg_row <- c(accession,pos,peptide_z,ddG,ddE,stoichiometry)
+    gg_df <- rbind(gg_df, gg_row)
+    next
+    
+  }
+  
+  if(i==31) {
+    
+    accession <- accession
+    pos <- 143
+    peptide_z <- peptide_z
+    ddG <- 0.428
+    ddE <- 0.322   
+    stoichiometry <- stoichiometry
+    gg_row <- c(accession,pos,peptide_z,ddG,ddE,stoichiometry)
+    gg_df <- rbind(gg_df, gg_row)
+    next
+    
+  }
+  
+  if(i==37) {
+    
+    accession <- accession
+    pos <- 339
+    peptide_z <- peptide_z
+    ddG <- -0.6485
+    ddE <- 0.680
+    stoichiometry <- stoichiometry
+    gg_row <- c(accession,pos,peptide_z,ddG,ddE,stoichiometry)
+    gg_df <- rbind(gg_df, gg_row)
+    next
+    
+  }
+  
+    if(i==41) {
+    
+    accession <- accession
+    pos <- 466
+    peptide_z <- peptide_z
+    ddG <- 0
+    ddE <- 0.787
+    stoichiometry <- stoichiometry
+    gg_row <- c(accession,pos,peptide_z,ddG,ddE,stoichiometry)
+    gg_df <- rbind(gg_df, gg_row)
+    next
+    
+  }
+  
+  # skip if the peptide contains more than one phosphosite (we cannot meaningfully represent ddG and ddE in such cases)
+  
+  pep_chunks <- unlist(strsplit(peptide_z,split='\\(ph\\)'))
+  if(length(pep_chunks) > 2) {next}
+  
+  # map peptide to entry in the master file
+  
+  master_entry <- master_unique_1[master_unique_peptides_1 %in% peptide_z,]
+  
+  # subset for the correct accession
+  
+  master_entry <- master_entry[master_entry[,5] %in% accession,]
+  
+  # Try finding the entry in the vSRC data if it is not found in the EPHB1 data
+  
+  if (nrow(master_entry) != 1) {
+    
+    master_entry <- master_unique_2[master_unique_peptides_2 %in% peptide_z,]
+    
+    # subset for the correct accession
+    
+    master_entry <- master_entry[master_entry[,5] %in% accession,]
+    
+  }
+  
+  # break the loop if we find no entries for this this peptide
+  
+  if (nrow(master_entry) != 1) stop('Cannot find the phosphosite')
+  
+  # retrieve psite position, ddG, and ddE
+  
+  pos <- readr::parse_number(master_entry$pos_tag)
+  ddG <- master_entry$ddG_intra
+  ddE <-  master_entry$ddE_norm
+  
+  gg_row <- c(accession,pos,peptide_z,ddG,ddE,stoichiometry)
+  gg_df <- rbind(gg_df, gg_row)
+  
+}
+
+####
+
+ephb1_gg_df <- gg_df
+colnames(ephb1_gg_df) <- c('accession','position','peptide','ddG','ddE','stoichiometry')
+rownames(ephb1_gg_df) <- 1:nrow(ephb1_gg_df)
+ephb1_gg_df <- ephb1_gg_df[ephb1_gg_df[,4] != 'no AF2',]
+ephb1_gg_df <- ephb1_gg_df[ephb1_gg_df[,5] != 'NaN',]
+
+# convert to data frame
+
+ephb1_gg_df <- as.data.frame(ephb1_gg_df)
+ephb1_gg_df[,4] <- as.numeric(ephb1_gg_df[,4])
+ephb1_gg_df[,5] <- as.numeric(ephb1_gg_df[,5])
+ephb1_gg_df[,6] <- as.numeric(ephb1_gg_df[,6])
+ephb1_gg_df$stoichiometry <- ephb1_gg_df$stoichiometry*100
+
+```
+
+# ddG vs. ddE scatter plot colored by stoichiometry (for vSRC)
+
+```{r}
+
+vsrc_stoi_data_df
+
+# Need to link the phosphorylation peptide back to the position in the protein sequence
+
+master_unique_1a <- read.csv('vSRC-vSRC_master_GEMME.csv') # vSRC data (vSRC batch)
+master_unique_1b <- read.csv('pY-vSRC_master_GEMME.csv') # vSRC data (pY batch)
+master_unique_1 <- rbind(master_unique_1a,master_unique_1b)
+master_unique_1 <- master_unique_1[!duplicated(master_unique_1[,c(5,6,33)]),] # Take all unique entries
+master_unique_peptides_1 <- master_unique_1$peptide_z
+
+# EPHB1 data for phosphopeptides with very low stoichiometry in vSRC but higher stoichiometry in EPHB1
+
+master_unique_2 <- read.csv('pYd-EPHB1_master_GEMME.csv') # EPHB1 data
+master_unique_peptides_2 <- master_unique_2$peptide_z
+
+######
+
+gg_df <- NULL
+
+for (i in 1:nrow(vsrc_stoi_data_df)) {
+  
+  print(i)
+  
+  # accession and peptide z
+  accession <- vsrc_stoi_data_df[i,6]
+  peptide_group <- vsrc_stoi_data_df[i,2]
+  peptide_z <- vsrc_stoi_data_df[i,3]
+  stoichiometry <- vsrc_stoi_data_df[i,8]
+  
+  # skip if the peptide contains more than one phosphosite (we cannot meaningfully represent ddG and ddE in such cases)
+  
+  pep_chunks <- unlist(strsplit(peptide_z,split='\\(ph\\)'))
+  if(length(pep_chunks) > 2) {next}
+  
+  # map peptide to entry in the master file
+  
+  master_entry <- master_unique_1[master_unique_peptides_1 %in% peptide_z,]
+  
+  # subset for the correct accession
+  
+  master_entry <- master_entry[master_entry[,5] %in% accession,]
+  
+  # Try finding the entry in the EPHB1 data if it is not found in the vSRC data
+  
+  if (nrow(master_entry) != 1) {
+    
+    master_entry <- master_unique_2[master_unique_peptides_2 %in% peptide_z,]
+    
+    # subset for the correct accession
+    
+    master_entry <- master_entry[master_entry[,5] %in% accession,]
+    
+  }
+  
+  # break the loop if we find no entries for this this peptide
+  
+  if (nrow(master_entry) != 1) stop('Cannot find the phosphosite')
+  
+  # retrieve psite position, ddG, and ddE
+  
+  pos <- readr::parse_number(master_entry$pos_tag)
+  ddG <- master_entry$ddG_intra
+  ddE <-  master_entry$ddE_norm
+  
+  gg_row <- c(accession,pos,peptide_z,ddG,ddE,stoichiometry)
+  gg_df <- rbind(gg_df, gg_row)
+  
+}
+
+######
+
+vsrc_gg_df <- gg_df
+colnames(vsrc_gg_df) <- c('accession','position','peptide','ddG','ddE','stoichiometry')
+rownames(vsrc_gg_df) <- 1:nrow(vsrc_gg_df)
+vsrc_gg_df <- vsrc_gg_df[vsrc_gg_df[,4] != 'no AF2',]
+vsrc_gg_df <- vsrc_gg_df[vsrc_gg_df[,5] != 'NaN',]
+
+# convert to data frame
+
+vsrc_gg_df <- as.data.frame(vsrc_gg_df)
+vsrc_gg_df[,4] <- as.numeric(vsrc_gg_df[,4])
+vsrc_gg_df[,5] <- as.numeric(vsrc_gg_df[,5])
+vsrc_gg_df[,6] <- as.numeric(vsrc_gg_df[,6])
+vsrc_gg_df$stoichiometry <- vsrc_gg_df$stoichiometry*100
+
+```
+
+## ggplot (EPHB1)
+
+```{r}
+
+library(ggplot2)
+library(ggrepel)
+
+# subset dataframe of interesting sites that we want to label
+
+ephb1_gg_df_struc_dex <- which(ephb1_gg_df[,4] > 9)
+ephb1_gg_df_cons_dex <- which(ephb1_gg_df[,5] > 0.92)
+ephb1_gg_df_special <- ephb1_gg_df[c(ephb1_gg_df_struc_dex,ephb1_gg_df_cons_dex),]
+special_dex <- c(ephb1_gg_df_struc_dex,ephb1_gg_df_cons_dex)
+normal_dex <- setdiff(1:nrow(ephb1_gg_df),special_dex)
+
+# labels for ggrepel
+
+ephb1_gg_df <- ephb1_gg_df[!duplicated(ephb1_gg_df[,c(1,2)]),]
+gg_label <- paste(ephb1_gg_df[,1],' ','Y',ephb1_gg_df[,2],sep='')
+gg_label[normal_dex] <- ''
+
+# manually change UniProt accessions to gene names
+
+gg_label[9] <- 'TPS2 Y813'
+gg_label[33] <- 'CKA2 Y50'
+gg_label[67] <- 'CCS1 Y209'
+gg_label[108] <- 'UTP10 Y45'
+gg_label[114] <- 'STM1 Y154'
+gg_label_ephb1 <- gg_label
+
+p <- ggplot(ephb1_gg_df, aes(x=ddG, y=ddE, color=stoichiometry)) + geom_point(size=1.75)
+p <- p+geom_label_repel(aes(label = gg_label_ephb1), size=2.25, color='black', label.size=NA, label.r=0.08,fill=alpha(c("white"),0.2))
+p <- p+scale_color_gradient(low=rgb(53/255,183/255,121/255,0/255), high=rgb(53/255,183/255,121/255,255/255))
+p <- p+theme_bw()
+p <- p+xlab('')+ylab('')+ggtitle('EPHB1')
+p <- p+coord_cartesian(xlim=c(0,30),y=c(0,1))
+p <- p+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.key.size = unit(0.5, 'cm'), #change legend key size
+        legend.key.height = unit(0.5, 'cm'), #change legend key height
+        legend.key.width = unit(0.5, 'cm'), #change legend key width
+        legend.title = element_text(size=6.5), #change legend title font size
+        legend.text = element_text(size=8)) #change legend text font size
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-7.5))
+
+ephb1_p <- p
+
+```
+
+## ggplot (vSRC)
+
+```{r}
+
+library(ggplot2)
+
+# subset dataframe for interesting sites
+
+vsrc_gg_df_one_dex <- which(vsrc_gg_df[,4] > 5 & vsrc_gg_df[,5] > 0.5)
+vsrc_gg_df_two_dex <- which(vsrc_gg_df[,4] > 4 & vsrc_gg_df[,5] > 0.83 & vsrc_gg_df[,6] > 20)
+vsrc_gg_df_three_dex <- which(vsrc_gg_df[,5] > 0.875 & vsrc_gg_df[,6] > 25)
+vsrc_gg_df_four_dex <- which(vsrc_gg_df[,4] > 2.5 & vsrc_gg_df[,5] > 0.75 & vsrc_gg_df[,6] > 0 & vsrc_gg_df[,5] < 0.84)
+
+vsrc_gg_df_special <- vsrc_gg_df[c(vsrc_gg_df_one_dex,vsrc_gg_df_two_dex,vsrc_gg_df_three_dex,vsrc_gg_df_four_dex),]
+special_dex <- c(vsrc_gg_df_one_dex,vsrc_gg_df_two_dex,vsrc_gg_df_three_dex,vsrc_gg_df_four_dex)
+normal_dex <- setdiff(1:nrow(vsrc_gg_df),special_dex)
+
+# labels for ggrepel
+
+vsrc_gg_df <- vsrc_gg_df[!duplicated(vsrc_gg_df[,c(1,2)]),]
+gg_label <- paste(vsrc_gg_df[,1],' ','Y',vsrc_gg_df[,2],sep='')
+gg_label[normal_dex] <- ''
+
+# manually change accessions to gene names
+
+gg_label[51] <- 'SEC9 Y115'
+gg_label[60] <- 'FAS1 Y836'
+gg_label[61] <- 'TCB1 Y682'
+gg_label[76] <- 'ACT1 Y682'
+gg_label_vsrc <- gg_label
+
+###
+
+p <- ggplot(vsrc_gg_df, aes(x=ddG, y=ddE, color=stoichiometry)) + geom_point(size=1.75)
+p <- p+geom_label_repel(aes(label = gg_label_vsrc), size=2.25, color='black', label.size=NA, label.r=0.08,fill=alpha(c("white"),0.2),max.overlaps=20)
+p <- p+scale_color_gradient(low=rgb(253/255,231/255,37/255,0/255), high=rgb(253/255,231/255,37/255,255/255))
+p <- p+theme_bw()
+p <- p+xlab('')+ylab('')+ggtitle('vSRC')
+p <- p+coord_cartesian(xlim=c(0,30),y=c(0,1))
+p <- p+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.key.size = unit(0.5, 'cm'), #change legend key size
+        legend.key.height = unit(0.5, 'cm'), #change legend key height
+        legend.key.width = unit(0.5, 'cm'), #change legend key width
+        legend.title = element_text(size=6.5), #change legend title font size
+        legend.text = element_text(size=8)) #change legend text font size
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-7.5))
+
+vsrc_p <- p
+
+```
+
+## cowplot
+
+```{r}
+
+vsrc_ephb1_cow <- plot_grid(vsrc_p,ephb1_p,nrow=1)
+
+# indepenently add x-axis and y-axis
+
+y.grob <- textGrob(c(expression(bold(Delta*Delta*'E (conservation)'))), 
+                   gp=gpar(fontface="bold", col="black", fontsize=12), rot=90)
+
+x.grob <- textGrob(c(expression(bold(Delta*Delta*'G (structure)'))), 
+                   gp=gpar(fontface="bold", col="black", fontsize=12))
+
+###
+
+ggsave(file='Figure_vsrc_ephb1_stoi.pdf', plot=vsrc_ephb1_cow, width=8.0, height=3.1) # without axis labels
+
+ggsave(file='Figure_vsrc_ephb1_stoi.pdf', plot=grid.arrange(arrangeGrob(vsrc_ephb1_cow, left = y.grob, bottom = x.grob)), width=8.0, height=3.4) # with axis labels
+
+```
+
+## Try to plot individually
+
+```{r}
+
+p <- ggplot(ephb1_gg_df, aes(x=ddG, y=ddE, color=stoichiometry)) + geom_point(size=1.75)
+p <- p+geom_label_repel(aes(label = gg_label_ephb1), size=2.4, color='black', label.size=NA, label.r=0.08,fill=alpha(c("white"),0.2))
+p <- p+scale_color_gradient(low=rgb(53/255,183/255,121/255,0/255), high=rgb(53/255,183/255,121/255,255/255))
+p <- p+theme_bw()
+p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))
+p <- p + theme(panel.border = element_blank())
+p <- p+ylab(c(expression(bold(Delta*Delta*'E (conservation)')))) + xlab(c(expression(bold(Delta*Delta*'G (structure)'))))+ggtitle('EPHB1')
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=11,face="bold"),axis.title.y=element_text(size=11,face="bold"),plot.title=element_text(size=13,face='bold'))
+p <- p+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.key.size = unit(0.4, 'cm'), #change legend key size
+        legend.key.height = unit(0.4, 'cm'), #change legend key height
+        legend.key.width = unit(0.4, 'cm'), #change legend key width
+        legend.title = element_text(size=7.5,face='bold'), #change legend title font size
+        legend.text = element_text(size=10)) #change legend text font size
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-5))
+
+ephb1_p <- p
+
+ggsave(file='Figure_3i.pdf', plot=ephb1_p, width=4.0, height=3.15)
+
+```
+
+## Try to plot individually
+
+```{r}
+
+p <- ggplot(vsrc_gg_df, aes(x=ddG, y=ddE, color=stoichiometry)) + geom_point(size=1.75)
+p <- p+geom_label_repel(aes(label = gg_label_vsrc), size=2.2, color='black', label.size=NA, label.r=0.08,fill=alpha(c("white"),0.2))
+p <- p+scale_color_gradient(low=rgb(253/255,231/255,37/255,0/255), high=rgb(253/255,231/255,37/255,255/255))
+p <- p+theme_bw()
+p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))
+p <- p + theme(panel.border = element_blank())
+p <- p+ylab(c(expression(bold(Delta*Delta*'E (conservation)')))) + xlab(c(expression(bold(Delta*Delta*'G (structure)'))))+ggtitle('vSRC')
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=11,face="bold"),axis.title.y=element_text(size=11,face="bold"),plot.title=element_text(size=13,face='bold'))
+p <- p+ theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.key.size = unit(0.4, 'cm'), #change legend key size
+        legend.key.height = unit(0.4, 'cm'), #change legend key height
+        legend.key.width = unit(0.4, 'cm'), #change legend key width
+        legend.title = element_text(size=7.5,face='bold'), #change legend title font size
+        legend.text = element_text(size=10)) #change legend text font size
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-5))
+
+vsrc_p <- p
+
+ggsave(file='Figure_S7.pdf', plot=vsrc_p, width=4.5, height=3.25)
+
+```
+
