@@ -23,7 +23,7 @@ fonts()
 
 ```{r}
 
-master_files <- list.files('') # Go to the directory containing all of the kinase master files with the weighted ddE values 
+master_files <- list.files('/home/david/Documents/Work/HFSP_hhblits_GEMME/GEMME_master_files_weighted/',full.names =T) # Go to the directory containing all of the kinase master files with the weighted ddE values 
 
 master_foldx_gemme_log2_all <- NULL 
 
@@ -69,10 +69,11 @@ weighted_ddG_ddE_rsa <- ddG_ddE_rsa
 ```{r}
 
 library(viridis)
+library(RColorBrewer)
 
 p <- ggplot(ddG_ddE_rsa, aes(x=ddG_intra, y=ddE_norm, color=RSA)) + geom_point(size=1.3)
-p <- p+scale_color_gradient(low=viridis(20)[8], high=viridis(20)[18])
-p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))
+p <- p+scale_color_gradient(low='#6baed6', high='#3f007d')
+p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_blank())
 p <- p+theme(axis.text=element_text(size=11),axis.title.x=element_text(size=14,face="bold"),axis.title.y=element_text(size=14,face="bold"),plot.title=element_text(size=18,face='bold'))
 p <- p + ylab(c(expression(bold(Delta*Delta*'E (conservation)')))) + xlab(c(expression(bold(Delta*Delta*'G (structure)')))) + ggtitle('')
 p <- p + labs(colour = "RSA") 
@@ -82,7 +83,7 @@ p <- p + theme(legend.key.size = unit(0.5, 'cm'), #change legend key size
         legend.title = element_text(size=11), #change legend title font size
         legend.text = element_text(size=9)) #change legend text font size
 
-ggsave(file='Figure_3g.pdf', plot=p, width=5.75, height=4.0)
+ggsave(file='Figure_3g.pdf', plot=p, width=6.25, height=4.0)
 
 ```
 
