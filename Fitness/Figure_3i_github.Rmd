@@ -19,32 +19,32 @@ alex_h_stoichiometry <- alex_h_stoichiometry[as.numeric(alex_h_stoichiometry[,1]
 
 # WT kinase only (not interested in the kinase-dead mutant)
 
-alex_h_stoichiometry_vSRC <- alex_h_stoichiometry[grep('EPHB1_wt',alex_h_stoichiometry[,4]),]
+alex_h_stoichiometry_EPHB1 <- alex_h_stoichiometry[grep('EPHB1_wt',alex_h_stoichiometry[,4]),]
 
 # phosphopeptides only (not interested in the non-phospo peptides)
 
-alex_h_stoichiometry_vSRC <- alex_h_stoichiometry_vSRC[grep('Y\\(ph\\)',alex_h_stoichiometry_vSRC[,3]),]
+alex_h_stoichiometry_EPHB1 <- alex_h_stoichiometry_EPHB1[grep('Y\\(ph\\)',alex_h_stoichiometry_EPHB1[,3]),]
 
-# omit sites with 0 stoichiometry (these correspond to phospho-peptide with non-0 stoichiometry in the other kinase)
+# omit sites with 0 stoichiometry (these correspond to phospho-peptides with non-0 stoichiometry in the other kinase)
 
-alex_h_stoichiometry_vSRC <- alex_h_stoichiometry_vSRC[alex_h_stoichiometry_vSRC[,8] > 0,]
+alex_h_stoichiometry_EPHB1 <- alex_h_stoichiometry_EPHB1[alex_h_stoichiometry_EPHB1[,8] > 0,]
 
 # average stoichiometry
 
-summary(alex_h_stoichiometry_vSRC[,8])
+summary(alex_h_stoichiometry_EPHB1[,8])
 
 # unique psites (around 122 at at a threshold of 0.01)
  
-unique(alex_h_stoichiometry_vSRC[,3])
+unique(alex_h_stoichiometry_EPHB1[,3])
 
 ```
 
-# remove redundant phosphopeptides and take the median stoichiometry (per phosphopeptide)
+# remove redundant phosphopeptides and take the median stoichiometry (per phosphosite)
 
 ```{r}
 
-acc <- alex_h_stoichiometry_vSRC[,6]
-phospho_peptide <- alex_h_stoichiometry_vSRC[,3]
+acc <- alex_h_stoichiometry_EPHB1[,6]
+phospho_peptide <- alex_h_stoichiometry_EPHB1[,3]
 acc_phospho_peptide <- paste(acc,'-',phospho_peptide,sep='')
 acc_phospho_peptide <- unique(acc_phospho_peptide)
 
@@ -57,10 +57,10 @@ for (i in 1:length(acc_phospho_peptide)) {
   acc <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[1])
   pep <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[2])
   
-  stoi_data <- alex_h_stoichiometry_vSRC[alex_h_stoichiometry_vSRC[,6] %in% acc & alex_h_stoichiometry_vSRC[,3] %in% pep,]
-  stoi_data[,8] <- median(stoi_data[,8])
+  stoi_data <- alex_h_stoichiometry_EPHB1[alex_h_stoichiometry_EPHB1[,6] %in% acc & alex_h_stoichiometry_EPHB1[,3] %in% pep,]
+  stoi_data[,8] <- median(stoi_data[,8]) # Take median stoichiometry across the replicate samples
   
-  # Just take the first row as they all have the same stoichiometries
+  # Just take the first row as they all now have the same stoichiometries (i.e. median stoichiometry)
   
   stoi_data <- stoi_data[1,]
   stoi_data_df <- rbind(stoi_data_df,stoi_data)
@@ -124,9 +124,9 @@ for (i in 1:length(acc_phospho_peptide)) {
   pep <- rapply(strsplit(acc_phospho_peptide[i],split='-'), function(x) x[2])
   
   stoi_data <- alex_h_stoichiometry_vSRC[alex_h_stoichiometry_vSRC[,6] %in% acc & alex_h_stoichiometry_vSRC[,3] %in% pep,]
-  stoi_data[,8] <- median(stoi_data[,8])
+  stoi_data[,8] <- median(stoi_data[,8]) # Take median stoichiometry across the replicate samples
   
-  # Just take the first row as they all have the same stoichiometries
+  # Just take the first row as they all now have the same stoichiometries (i.e. median stoichiometry)
   
   stoi_data <- stoi_data[1,]
   stoi_data_df <- rbind(stoi_data_df,stoi_data)
