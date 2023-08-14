@@ -232,14 +232,14 @@ nonphos_accessions <- setdiff(nonphos_accessions, native_union)
 
 ```
 
-# Construct an orthology dataframe for the yeast proteins that are not phosphorylated (this gives is a baseline expectation for the number of human orthologues that
+# Construct an orthology dataframe for the yeast proteins that are not phosphorylated (this gives us a baseline expectation for the number of human orthologues that
 # we should expect for a random set of proteins of this size)
 
 ```{r}
 
 setwd("")
 
-nonphos_vertebrate_ortho <- list.files('')  # all files in the directory containing vetrebrate ensembl sequences for the non-phosphorylated proteins 
+nonphos_vertebrate_ortho <- list.files('')  # all files in the directory containing vertebrate ensembl sequences for the non-phosphorylated proteins 
 nonphos_vertebrate_ortho <- nonphos_vertebrate_ortho[file.info(list.files('',full.name=T))$size > 0] # all such files that are not empty
 nonphos_vertebrate_accession <- rapply(strsplit(nonphos_vertebrate_ortho,split='_'), function(x) x[1])
 
