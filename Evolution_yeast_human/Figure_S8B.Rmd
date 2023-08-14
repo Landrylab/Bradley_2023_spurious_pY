@@ -1,5 +1,5 @@
 ---
-title: "Figure_S8a"
+title: "Figure_S8b"
 author: "David Bradley"
 date: '2023-08-14'
 output: html_document
@@ -49,7 +49,6 @@ accession_vec_spurious <- spurious_accessions
 
 ```{r}
 
-setwd("")
 vertebrate_ortho <- list.files('') # all files in the directory containing vetrebrate ensembl sequences
 vertebrate_ortho <- vertebrate_ortho[file.info(list.files('',full.name=T))$size > 0] # filter for non-empty files
 
@@ -81,7 +80,6 @@ for (i in 1:length(accession_vec)) {
 
 # Repeat but this time for the non-phosphorylated proteins in our dataset (for cases where there is a native pY that we did not detect via MS/MS) 
 
-setwd("")
 nonphos_vertebrate_ortho <- list.files('') 
 nonphos_vertebrate_ortho <- nonphos_vertebrate_ortho[file.info(list.files('',full.name=T))$size > 0]
 nonphos_vertebrate_accession <- rapply(strsplit(nonphos_vertebrate_ortho,split='_'), function(x) x[1])
@@ -106,7 +104,7 @@ for (i in 1:length(accession_vec)) {
     
 }
 
-# ~48.98% of the yeast substrates have at least one orthologue in human
+# ~49.0% of the yeast substrates have at least one orthologue in human
 
 length(unique(hs_ortho_vec))/length(accession_vec)
 
@@ -289,64 +287,181 @@ length(unique(sc_hs_nophos_df[,1]))/length(nonphos_accessions) #47.9%
 
 ```
 
-# Fisher test of orthology enrichment
+## Process the human phosphorylation data (PSP >= 5)
 
 ```{r}
 
-sc_hs_ortho_all <- rbind(sc_hs_df_phospho,sc_hs_nophos_df)
+# As a reminder, for the 'high confidence' pY we use all pY that are supported by at least 5 sources in PSP
 
-# sc pY and has an orthologye
+hs_pY_high_conf <- read.table('human_psp_5.txt',head=T)
+hs_pY_high_conf <- hs_pY_high_conf[,c(3,5,10)]
+hs_pY_high_conf[,2] <- readr::parse_number(hs_pY_high_conf[,2])
+hs_pY_high_conf[,3] <- toupper(hs_pY_high_conf[,3])
+hs_pY_high_conf[,1] <- rapply(strsplit(hs_pY_high_conf[,1],split='-'), function(x) x[1]) # Remove the uniprot isoform info as this cannot be mapped to Ensembl IDs
 
-sc_phos_ortho <- length(which(accession_vec %in% sc_hs_ortho_all[,1]))
-sc_phos_non_ortho <- length(which(!accession_vec %in% sc_hs_ortho_all[,1]))
-sc_non_phos_ortho <- length(which(nonphos_accessions %in% sc_hs_ortho_all[,1]))
-sc_non_phos_non_ortho <- length(which(!nonphos_accessions %in% sc_hs_ortho_all[,1]))
+colnames(hs_pY_high_conf) <- c('accession','position','window')
 
-# construct the contingency table
+hs_pY_high_conf_id <- unique(hs_pY_high_conf[,1])
 
-sc_phos_ortho_mat <- matrix(c(sc_phos_ortho,sc_phos_non_ortho,sc_non_phos_ortho,sc_non_phos_non_ortho),ncol=2)
+# We need to convert these uniprot IDs to Ensembl
 
-rownames(sc_phos_ortho_mat) <- c('ortho','non-ortho')
-colnames(sc_phos_ortho_mat) <- c('pY','not pY')
+library(clusterProfiler)
+library(org.Hs.eg.db)
+hs_pY_uniprot_ensembl <- bitr(hs_pY_high_conf_id, fromType="UNIPROT", toType=c("ENSEMBL"), OrgDb="org.Hs.eg.db")
 
-fisher.test(sc_phos_ortho_mat)
-fisher.test(t(sc_phos_ortho_mat))
+# Map back to the original table
 
-# Very highly significant
+hs_pY_high_conf_ensembl <- data.frame(hs_pY_uniprot_ensembl[match(hs_pY_high_conf[,1],hs_pY_uniprot_ensembl[,1]),2],hs_pY_high_conf)
+colnames(hs_pY_high_conf_ensembl) <- c('ensembl','accession','position','window')
 
-# Conclusion: proteins that are natively phosphorylated are slightly less likely to have a human orthologue than non-phosphorylated proteins (i.e.
-# spurious interactions are biased towards interactions with homologues of native interaction partners)
-
-hs_ortho_vec_random <- length(accession_vec)*(sc_non_phos_ortho/sum(sc_non_phos_ortho,sc_non_phos_non_ortho))
+# Extract the unique IDs
+hs_pY_high_conf_ensembl_id <- unique(hs_pY_uniprot_ensembl[,2])
 
 ```
 
-# Sup 8A GGplot
+# Do the orthology mapping with respect to phosphorylation in human
+
+```{r}
+
+# For proteins that were found to be phosphorylated in our dataset
+
+setwd("~/Documents/Work/HFSP_evolution/ensembl_vertebrate_orthologs")
+
+hs_pY_ortho_vec <- NULL
+
+for (i in 1:length(accession_vec)) {
+  
+  yeast_accession <- accession_vec[i]
+  vert_dex <- which(vertebrate_accession == yeast_accession)
+  
+  #Skip if there are no vertebrate orthologues
+  if(length(vert_dex) == 0) {next}
+  
+  vertebrate_seq <- seqinr::read.fasta(vertebrate_ortho[vert_dex],seqtype = 'AA')
+  vertebrate_id <- rapply(strsplit(names(vertebrate_seq),split='\\:'),function(x) x[1])
+  vertebrate_species <- rapply(strsplit(names(vertebrate_seq),split='\\:'),function(x) x[2])
+  vertebrate_class <- rapply(strsplit(names(vertebrate_seq),split='\\:'),function(x) x[4])
+  
+  # Find if there is a human orthologue present
+  
+  hs_ortho_id <- vertebrate_id[grep('homo_sapiens',vertebrate_species)]
+  
+  # Check to see if at least one of the orthologues is tyrosine-phosphorylated
+  
+  hs_pY_dex <- which(hs_ortho_id %in% hs_pY_high_conf_ensembl_id)
+
+  if(length(hs_pY_dex) > 0) {hs_pY_ortho_vec <- c(hs_pY_ortho_vec, yeast_accession)}
+    
+}
+
+# For proteins that were not found to be phosphorylated in our dataset
+
+setwd("~/Documents/Work/HFSP_evolution/ensembl_nonphos_vertebrate_orthologs")
+
+for (i in 1:length(accession_vec)) {
+  
+  yeast_accession <- accession_vec[i]
+  vert_dex <- which(nonphos_vertebrate_accession == yeast_accession)
+  
+  #Skip if there are no vertebrate orthologues
+  if(length(vert_dex) == 0) {next}
+  
+  vertebrate_seq <- seqinr::read.fasta(nonphos_vertebrate_ortho[vert_dex],seqtype = 'AA')
+  vertebrate_id <- rapply(strsplit(names(vertebrate_seq),split='\\:'),function(x) x[1])
+  vertebrate_species <- rapply(strsplit(names(vertebrate_seq),split='\\:'),function(x) x[2])
+  vertebrate_class <- rapply(strsplit(names(vertebrate_seq),split='\\:'),function(x) x[4])
+  
+  # Find if there is a human orthologue present
+  
+  hs_ortho_id <- vertebrate_id[grep('homo_sapiens',vertebrate_species)]
+
+  # Check to see if at least one of the orthologues is tyrosine-phosphorylated
+  
+  hs_pY_dex <- which(hs_ortho_id %in% hs_pY_high_conf_ensembl_id)
+
+  if(length(hs_pY_dex) > 0) {hs_pY_ortho_vec <- c(hs_pY_ortho_vec, yeast_accession)}
+    
+}
+
+# around ~37.4% of native yeast substrates has at least one orthologue in human that is also phosphorylated on tyrosine
+
+length(unique(hs_pY_ortho_vec))/length(accession_vec)
+
+```
+
+# For yeast proteins with human orthologues, check for enrichment of (natively) phosphorylated yeast proteins against phosphorylated human proteins 
+
+```{r}
+
+sc_hs_df_phospho
+sc_hs_nophos_df
+  
+# sc pY and has an orthologue that is phosphorylated in human 
+
+a <- unique(sc_hs_df_phospho[(sc_hs_df_phospho[,2] %in% hs_pY_high_conf_ensembl_id),1])
+
+# sc pY and has an orthologue that is not phosphorylated in human - must remove proteins that have a different orthologue that is phosphorylated
+b <- unique(sc_hs_df_phospho[!(sc_hs_df_phospho[,2] %in% hs_pY_high_conf_ensembl_id),1])
+b <- setdiff(b,a)
+
+# sc non-pY and has an orthologue that is phosphorylated in human 
+
+c <- unique(sc_hs_nophos_df[(sc_hs_nophos_df[,2] %in% hs_pY_high_conf_ensembl_id),1])
+
+# sc non-pY and has an orthologue that is not phosphorylated in human 
+d <- unique(sc_hs_nophos_df[!(sc_hs_nophos_df[,2] %in% hs_pY_high_conf_ensembl_id),1])
+d <- setdiff(d,c)
+
+sc_phos_ortho_phos <- length(a)
+sc_phos_ortho_non_phos <- length(b)
+sc_non_phos_ortho_phos <- length(c)
+sc_non_phos_ortho_non_phos <- length(d)
+
+hs_pY_hc_vec <- sc_phos_ortho_phos
+
+# construct the contingency table
+
+sc_phos_ortho_phos_mat <- matrix(c(sc_phos_ortho_phos,sc_phos_ortho_non_phos,sc_non_phos_ortho_phos,sc_non_phos_ortho_non_phos),ncol=2,byrow=T)
+
+rownames(sc_phos_ortho_phos_mat) <- c('yeast pY (ortho)','yeast non-pY (ortho)')
+colnames(sc_phos_ortho_phos_mat) <- c('human pY','human non-pY')
+
+fisher.test(sc_phos_ortho_phos_mat)
+fisher.test(t(sc_phos_ortho_phos_mat))
+
+# There is clear enrichment of phosphorylated pY for orthologues with pY (1.3x10-11)
+
+hs_phospho_ortho_vec_random <- (sc_phos_ortho_phos+sc_phos_ortho_non_phos)*(sc_non_phos_ortho_phos/sum(sc_non_phos_ortho_phos,sc_non_phos_ortho_non_phos))
+
+# There is clear enrichment of phosphorylated pY for orthologues with pY (1.2x10-11)
+
+```
+
+# Plot out the data
 
 ```{r}
 
 library(viridis)
 library(ggsignif)
 
-num_vec <- c(length(accession_vec),length(hs_ortho_vec),hs_ortho_vec_random)
-df <- data.frame(class=c("yeast pY", "yeast pY: human \n (observed)", "yeast pY: human \n (expected)"),
+num_vec <- c(sc_phos_ortho_phos+sc_phos_ortho_non_phos,sc_phos_ortho_phos,hs_phospho_ortho_vec_random)
+df <- data.frame(class=c("yeast pY: human", "yeast pY: human pY\n (observed)", "yeast pY: human pY\n (expected)"),
                 num=num_vec)
 
-write.table(df,file='S8A_df.txt',row.names=F,quote=F)
+df$class <- factor(df$class, levels = c("yeast pY: human", "yeast pY: human pY\n (observed)", "yeast pY: human pY\n (expected)"))
 
-df$class <- factor(df$class, levels = c("yeast pY", "yeast pY: human \n (observed)", "yeast pY: human \n (expected)"))
+write.table(df,file='S8B_df.txt',row.names=F,quote=F)
 
-p <- ggplot(df, aes(x=class, y=num, fill = class, width=.5)) + geom_bar(color=NA, lwd=0, stat='identity',alpha=0.4) + scale_fill_manual(values = c(rev(cividis(25))[1],colors()[131],colors()[261]))
+p <- ggplot(df, aes(x=class, y=num, fill = class, width=.5)) + geom_bar(color=NA, lwd=0, stat='identity',alpha=0.4) + scale_fill_manual(values = c(colors()[131],colors()[551],colors()[261]))
 p <- p+theme_bw() 
-p <- p+theme(axis.text.y=element_text(size=7),axis.text.x=element_text(size=5.75),axis.title.x=element_text(size=4.5,face="plain"),axis.title.y=element_text(size=11.5,face="plain"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(axis.text.y=element_text(size=7.5),axis.text.x=element_text(size=6.2),axis.title.x=element_text(size=4.5,face="plain"),axis.title.y=element_text(size=12.5,face="plain"),plot.title=element_text(size=18,face='bold'))
 p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
 p <- p + ylab("frequency") + xlab("") + ggtitle('')
 p <- p + theme(legend.position = "none")
 p <- p + theme(panel.border= element_blank())
-p <- p + geom_signif(comparisons = list(c("yeast pY: human \n (observed)", "yeast pY: human \n (expected)")), annotations="NS",y_position = 76, textsize=2.8)
-p2 <- p
+p <- p + geom_signif(comparisons = list(c("yeast pY: human pY\n (observed)", "yeast pY: human pY\n (expected)")), annotations="***",y_position = 57)
+p <- p+ coord_cartesian(ylim = c(0, 147))
 
-ggsave(file='S8a.pdf', plot=p, width=3.0, height=3.0)
+ggsave(file='S8b.pdf', plot=p, width=3.4, height=3.4)
 
 ```
-
