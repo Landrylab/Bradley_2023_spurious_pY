@@ -1,0 +1,1347 @@
+---
+title: "Figure_S8c"
+author: "David Bradley"
+date: '2023-08-14'
+output: html_document
+---
+
+# The prupose of this file is to check whether the pY we see on the S. cerevisiae protein is aligning to pY on
+# its human ortholog. 
+
+# First job is to generate a list of uniquely phosphorylated yeast proteins (from tyrosine kinases):
+
+```{r}
+
+master_file <- read.csv('master_file_unique_new_native.csv') # Read in list of all uniquely-phosphorylated pY (across kinases)
+
+accession_pos <- paste(master_file[,8],master_file[,7],sep='_')
+accession_pos <- gsub('_Y','_',accession_pos)
+accession_pos_native_vec <- paste(master_file[,8],master_file[,7],master_file[,10],sep='_') 
+
+# Remove candidate pY sites that have been detected at least once in another study
+
+native_all <- read.table('native_all_Lanz_Leutert_union.txt')[,1] # spreadsheet of all of the unique native pY sites
+
+accession_pos_native_vec <- accession_pos_native_vec[!accession_pos %in% native_all]
+
+```
+
+# For each unique pY, map back to the alignment and try and determine if it aligns with a pY from at least one human orthologue
+
+```{r}
+
+# yeast pY ortholog tbale
+
+sc_hs_df_phospho <- read.table('sc_hs_df_phospho.txt') # orthologue table for the spurious phosphosites
+
+# human pY table (PS >= 5)
+
+hs_pY_high_conf_ensembl <- read.table('hs_pY_high_conf_ensembl.txt',head=T) # High-confidence human pY with Ensembl IDs (PSP >= 5)
+
+# At this stage it would be best to work with the unfiltered phmmer alignment than the filtered alignment
+
+al_files <- list.files("~/Documents/Work/HFSP_evolution/phmmer_processed") # directory of alignment files derived from phmmer
+al_files <- al_files[grep('compiled.fa',al_files)]
+al_file_IDs <- rapply(strsplit(al_files,split='_'), function(x) x[1])
+
+test_df <- NULL
+candidate_human_vec <- NULL
+candidate_human_pY_vec <- NULL
+
+count = NULL
+
+for (i in 1:length(accession_pos_native_vec)) {
+  
+  print(i)
+  
+  accession_pos_native <- accession_pos_native_vec[i]
+  accession <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[1]) # accession
+  pos <- readr::parse_number(rapply(strsplit(accession_pos_native,split='_'), function(x) x[2])) # position
+  native <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[3]) # native status
+  
+  # Do not consider native sites
+  
+  if (native == 'Yes') {next}
+  
+  # Read in the alignment
+  
+  al_file <- al_files[al_file_IDs %in% accession]
+  
+  # If there is no file here that means the protein does not have a human orthologue; skip 
+  if(length(al_file) != 1) (next)
+  
+  al_fas <- seqinr::read.fasta(al_file,seqtype='AA')
+  al_fas_names <- rapply(strsplit(names(al_fas),split=':'), function(x) x[1])
+  
+  # Retrieve the cerevisiae sequence
+  
+  sc_seq <- al_fas[al_fas_names %in% accession]
+  if(length(sc_seq) != 1) {stop('There is a problem here (wrong number of Sc sequences)')}
+  
+  sc_seq_range <- rapply(strsplit(rapply(strsplit(names(sc_seq),split=':'), function(x) x[2]),split='/'), function(x) x[2])
+  sc_start <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[1])) # start of sc sequence
+  sc_end <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[2])) # end of of sc sequence
+  
+  if(length(sc_start) != 1) {stop('Too many start positions')}
+  if(length(sc_end) != 1) {stop('Too many end positions')}
+  
+  sc_len <- sc_end-sc_start+1 #length of the S. cerevisiae sequences
+  
+  sc_raw_seq <- unlist(seqinr::getSequence(sc_seq))
+  sc_raw_seq <- toupper(sc_raw_seq)
+  sc_raw_seq_ungapped <- sc_raw_seq[-grep('-',sc_raw_seq)]
+  if(length(sc_raw_seq_ungapped) != sc_len) {stop('Length of the sequence is not as expected')}
+ 
+  # quickly construct an alignment mapping table (between S. cerevisiae seq and alignment)
+  
+  aa_vec <- NULL
+  al_vec <- NULL
+  aa_seq = 0
+  al_seq = 0
+  
+  for (j in 1:length(sc_raw_seq)) {
+    
+    al_seq = al_seq+1
+    
+    if(sc_raw_seq[j] == '-') {aa_vec <- c(aa_vec,'-')}
+    if(sc_raw_seq[j] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+    al_vec <- c(al_vec,al_seq)
+    
+  }
+  
+  al_map_df <- data.frame(al_vec,aa_vec)
+  colnames(al_map_df) <- c('alignment','primary') # alignment numbering vs. primary sequence numbering
+  rownames(al_map_df) <- NULL
+  
+  # alignment position for pY
+  
+  pY_al_pos <- al_map_df[al_map_df[,2] == pos,1] # 'pos' is the phosphosite position
+  
+  # Find the human orthologue in the alignment
+  
+  sc_hs_df_phospho <- sc_hs_df_phospho
+  
+  human_ortho <- sc_hs_df_phospho[sc_hs_df_phospho[,1] %in% accession,2]
+  human_fas <- al_fas[al_fas_names %in% human_ortho]
+  human_fas_id <- rapply(strsplit(names(human_fas),split=':'), function(x) x[1])
+  
+  # Skip if there are no human orthologues in the alignment 
+  
+  if (length(human_fas) == 0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog - not necessarily phosphorylated)
+  
+  ####
+  candidate_human_vec <- c(candidate_human_vec,accession_pos_native)
+  ####
+  
+  # Retrieve the positions that align with the pY
+  
+  human_fas_al <- rapply(human_fas, function(x) x[pY_al_pos])
+  
+  # Skip at this point if none of the alignment positions contain a Y
+   
+  human_fas_al_Y <- human_fas_al#[human_fas_al %in% 'Y']  ## Actually do not filter for Y alignments at this step (it is not necessary)
+  human_fas_al_Y_id <- rapply(strsplit(names(human_fas_al_Y),split=':'), function(x) x[1])
+  
+  if(length(human_fas_al_Y) == 0) {next}
+  
+  # 
+  
+  hs_pY_high_conf_ensembl <- hs_pY_high_conf_ensembl  # High-confidence human pY with Ensembl IDs (PSP >= 5)
+  
+  human_al_Y_seq_Y <- hs_pY_high_conf_ensembl[hs_pY_high_conf_ensembl[,1] %in% human_fas_al_Y_id,] # Retrieve the known pY phosphosites for the human orthologs   
+ 
+  # Skip if none of the human orthologues are pY phosphorylated (PSP >= 5)
+  if(nrow(human_al_Y_seq_Y)==0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog that is pY-phosphorylated)
+  
+  ###  
+  candidate_human_pY_vec <- c(candidate_human_pY_vec,accession_pos_native)
+  ###
+  
+  # Iterate through each human pY protein and map between the sequence and the alignment
+  
+  for (j in 1:nrow(human_al_Y_seq_Y)) {
+    
+    human_id <- human_al_Y_seq_Y[j,1]
+    
+    # Reconstruct the sequence range of the human protein from the phmmer annotation
+    
+    hs_seq_start_end <- rapply(strsplit(names(human_fas[human_fas_id %in% human_id]),split='/'), function(x) x[2])
+    hs_seq_start_end <- unlist(strsplit(hs_seq_start_end,split='_'))
+    hs_seq_start_end <- gsub('-',':',hs_seq_start_end)
+    
+    hs_seq_range <- NULL
+    
+    for (k in 1:length(hs_seq_start_end)) {
+      hs_seq_range <- c(hs_seq_range,eval(str2lang(hs_seq_start_end[k])))
+    }
+    
+    # Extract the human sequence
+    
+    hs_raw_seq <- unlist(seqinr::getSequence(human_fas[human_fas_id %in% human_id]))
+    hs_raw_seq <- toupper(hs_raw_seq)
+    
+    aa_vec <- NULL
+    al_vec <- NULL
+    aa_seq = 0
+    al_seq = 0
+     
+    # alignment mapping table between the alignment and the order of the human sequence as it is outputted by phmmer
+    
+    for (k in 1:length(hs_raw_seq)) {
+    
+      al_seq = al_seq+1
+    
+      if(hs_raw_seq[k] == '-') {aa_vec <- c(aa_vec,'-')}
+      if(hs_raw_seq[k] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+      al_vec <- c(al_vec,al_seq)
+      
+    }
+    
+    hs_al_map_df <- data.frame(al_vec,aa_vec, aa_vec)
+    colnames(hs_al_map_df) <- c('alignment','phmmer_order','primary')
+    
+    hs_ungapped <- hs_al_map_df[hs_al_map_df[,3] != '-',3]
+    
+    # If hs_seq_range does not match the number of ungapped positions
+    # then this means that there is overlap in the sequence range between
+    # the two segments. However, since we always give the more N-terminal (first)
+    # segments precedence, we can piece together the true sequence range
+    
+    if(length(hs_seq_start_end) > 1) {count <- c(count, accession_pos_native)} # Make a record of number of times human alignment is derived from multiple phmmer segments
+    
+    if(length(hs_ungapped) != length(hs_seq_range)) {
+      
+      if(length(hs_seq_start_end) > 2){
+        
+        if (human_id == 'ENSG00000181222') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000165525') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000107651') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000105675') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000173545') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000149657') {next} # Manually confirmed lack of conservation
+        stop()
+        
+      }
+      
+      seq_len_diff <- length(hs_seq_range) - length(hs_ungapped)
+      
+      if (human_id == 'ENSG00000108592') {next} # Manually confirmed lack of conservation
+      if (human_id == 'ENSG00000156313') {next} # Manually confirmed lack of conservation
+      
+      sec_seg_start <- as.numeric(rapply(strsplit(hs_seq_start_end[2],split=':'), function(x) x[1]))
+      overlap_seq <- sec_seg_start:(sec_seg_start+seq_len_diff-1)
+      hs_seq_range <- setdiff(hs_seq_range,overlap_seq)
+      
+    }
+    
+    hs_al_map_df[hs_al_map_df[,3] != '-',3] <- hs_seq_range # human primary sequence
+    rownames(hs_al_map_df) <- NULL
+    
+    # Check if the Sc pY match the Hs pY
+    
+    sc_pY_human_Y_pos <- hs_al_map_df[hs_al_map_df[,1] == pY_al_pos,3] # the human primary sequence position that maps to the phosphorylated pY in S. cerevisiae
+    human_pY_pos <- human_al_Y_seq_Y[j,3] # the human primary sequence position that is actually phosphorylated
+  
+    if(sc_pY_human_Y_pos == human_pY_pos) {
+      test_vec <- c(accession,native,pos,pY_al_pos,unlist(human_al_Y_seq_Y[j,]))
+      test_df <- rbind(test_df,test_vec)
+    }
+    
+  }
+  
+}
+
+colnames(test_df) <- c('sc_accesion','native','sc_pos', 'pos (alignment)','ensembl', 'hs_accession', 'hs_pos','window')
+test_df_nr <- test_df[!duplicated(test_df[,c(1,2,3)]),]
+
+# 
+sc_hs_ortho_no <- length(candidate_human_vec) # the number of sites that map to a protein that has at least one orthologue in human
+
+hs_sc_hc_pos0 <- test_df_nr
+sc_hc_pos0 <- length(candidate_human_pY_vec) # the number of sites that map to a protein that has at least one orthologue in human that has at least one pY
+
+# Less than 5% overlap between Sc pY and Hs pY at the position level
+
+nrow(hs_sc_hc_pos0)/sc_hc_pos0
+
+# Write out the list of S. cerevisiae sites that align to human
+
+```
+
+# As before but this time in an alignment window of +/- 3
+
+```{r}
+
+# yeast pY ortholog tbale
+
+sc_hs_df_phospho <- read.table('sc_hs_df_phospho.txt') # orthologue table for the spurious phosphosites
+
+# human pY table (PS >= 5)
+
+hs_pY_high_conf_ensembl <- read.table('hs_pY_high_conf_ensembl.txt',head=T) # High-confidence human pY with Ensembl IDs (PSP >= 5)
+
+# Set the threshold difference for the alignment window
+
+match_diff <- 3
+
+# At this stage it would be best to work with the unfiltered phmmer alignment than the filtered alignment
+
+al_files <- list.files("~/Documents/Work/HFSP_evolution/phmmer_processed") # directory of alignment files derived from phmmer
+al_files <- al_files[grep('compiled.fa',al_files)]
+al_file_IDs <- rapply(strsplit(al_files,split='_'), function(x) x[1])
+
+test_df <- NULL
+candidate_human_vec <- NULL
+candidate_human_pY_vec <- NULL
+
+count = NULL
+
+for (i in 1:length(accession_pos_native_vec)) {
+  
+  print(i)
+  
+  accession_pos_native <- accession_pos_native_vec[i]
+  accession <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[1]) # accession
+  pos <- readr::parse_number(rapply(strsplit(accession_pos_native,split='_'), function(x) x[2])) # position
+  native <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[3]) # native status
+  
+  # Do not consider native sites
+  
+  if (native == 'Yes') {next}
+  
+  # Read in the alignment
+  
+  al_file <- al_files[al_file_IDs %in% accession]
+  
+  # If there is no file here that means the protein does not have a human orthologue; skip 
+  if(length(al_file) != 1) (next)
+  
+  al_fas <- seqinr::read.fasta(al_file,seqtype='AA')
+  al_fas_names <- rapply(strsplit(names(al_fas),split=':'), function(x) x[1])
+  
+  # Retrieve the cerevisiae sequence
+  
+  sc_seq <- al_fas[al_fas_names %in% accession]
+  if(length(sc_seq) != 1) {stop('There is a problem here (wrong number of Sc sequences)')}
+  
+  sc_seq_range <- rapply(strsplit(rapply(strsplit(names(sc_seq),split=':'), function(x) x[2]),split='/'), function(x) x[2])
+  sc_start <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[1])) # start of sc sequence
+  sc_end <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[2])) # end of of sc sequence
+  
+  if(length(sc_start) != 1) {stop('Too many start positions')}
+  if(length(sc_end) != 1) {stop('Too many end positions')}
+  
+  sc_len <- sc_end-sc_start+1 #length of the S. cerevisiae sequences
+  
+  sc_raw_seq <- unlist(seqinr::getSequence(sc_seq))
+  sc_raw_seq <- toupper(sc_raw_seq)
+  sc_raw_seq_ungapped <- sc_raw_seq[-grep('-',sc_raw_seq)]
+  if(length(sc_raw_seq_ungapped) != sc_len) {stop('Length of the sequence is not as expected')}
+ 
+  # quickly construct an alignment mapping table (between S. cerevisiae seq and alignment)
+  
+  aa_vec <- NULL
+  al_vec <- NULL
+  aa_seq = 0
+  al_seq = 0
+  
+  for (j in 1:length(sc_raw_seq)) {
+    
+    al_seq = al_seq+1
+    
+    if(sc_raw_seq[j] == '-') {aa_vec <- c(aa_vec,'-')}
+    if(sc_raw_seq[j] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+    al_vec <- c(al_vec,al_seq)
+    
+  }
+  
+  al_map_df <- data.frame(al_vec,aa_vec)
+  colnames(al_map_df) <- c('alignment','primary') # alignment numbering vs. primary sequence numbering
+  rownames(al_map_df) <- NULL
+  
+  # alignment position for pY
+  
+  pY_al_pos <- al_map_df[al_map_df[,2] == pos,1] # 'pos' is the phosphosite position
+  pY_al_pos_start <- pY_al_pos-match_diff # start position of the alignment window
+  pY_al_pos_end <- pY_al_pos+match_diff # end position of the alignment window
+  
+  # correct for the fact that the sequence window may extend above r below the alignment length
+  
+  if(pY_al_pos_start < 1) {pY_al_pos_start <- 1}
+  if(pY_al_pos_end > length(sc_raw_seq)) {pY_al_pos_end <- length(sc_raw_seq)}
+  
+  # Find the human orthologue in the alignment
+  
+  sc_hs_df_phospho <- sc_hs_df_phospho
+  
+  human_ortho <- sc_hs_df_phospho[sc_hs_df_phospho[,1] %in% accession,2]
+  human_fas <- al_fas[al_fas_names %in% human_ortho]
+  human_fas_id <- rapply(strsplit(names(human_fas),split=':'), function(x) x[1])
+  
+  # Skip if there are no human orthologues in the alignment 
+  
+  if (length(human_fas) == 0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog - not necessarily phosphorylated)
+  
+  ####
+  candidate_human_vec <- c(candidate_human_vec,accession_pos_native)
+  ####
+  
+  # Retrieve the positions that align with the pY
+  
+  human_fas_al <- rapply(human_fas, function(x) x[pY_al_pos])
+  
+  # Skip at this point if none of the alignment positions contain a Y
+   
+  human_fas_al_Y <- human_fas_al#[human_fas_al %in% 'Y']  ## Actually do not filter for Y alignments at this step (it is not necessary)
+  human_fas_al_Y_id <- rapply(strsplit(names(human_fas_al_Y),split=':'), function(x) x[1])
+  
+  if(length(human_fas_al_Y) == 0) {next}
+  
+  # 
+  
+  hs_pY_high_conf_ensembl <- hs_pY_high_conf_ensembl  # High-confidence human pY with Ensembl IDs (PSP >= 5)
+  
+  human_al_Y_seq_Y <- hs_pY_high_conf_ensembl[hs_pY_high_conf_ensembl[,1] %in% human_fas_al_Y_id,] # Retrieve the known pY phosphosites for the human orthologs   
+ 
+  # Skip if none of the human orthologues are pY phosphorylated (PSP >= 5)
+  if(nrow(human_al_Y_seq_Y)==0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog that is pY-phosphorylated)
+  
+  ###  
+  candidate_human_pY_vec <- c(candidate_human_pY_vec,accession_pos_native)
+  ###
+  
+  # Iterate through each human pY protein and map between the sequence and the alignment
+  
+  for (j in 1:nrow(human_al_Y_seq_Y)) {
+    
+    human_id <- human_al_Y_seq_Y[j,1]
+    
+    # Reconstruct the sequence range of the human protein from the phmmer annotation
+    
+    hs_seq_start_end <- rapply(strsplit(names(human_fas[human_fas_id %in% human_id]),split='/'), function(x) x[2])
+    hs_seq_start_end <- unlist(strsplit(hs_seq_start_end,split='_'))
+    hs_seq_start_end <- gsub('-',':',hs_seq_start_end)
+    
+    hs_seq_range <- NULL
+    
+    for (k in 1:length(hs_seq_start_end)) {
+      hs_seq_range <- c(hs_seq_range,eval(str2lang(hs_seq_start_end[k])))
+    }
+    
+    # Extract the human sequence
+    
+    hs_raw_seq <- unlist(seqinr::getSequence(human_fas[human_fas_id %in% human_id]))
+    hs_raw_seq <- toupper(hs_raw_seq)
+    
+    aa_vec <- NULL
+    al_vec <- NULL
+    aa_seq = 0
+    al_seq = 0
+     
+    # alignment mapping table between the alignment and the order of the human sequence as it is outputted by phmmer
+    
+    for (k in 1:length(hs_raw_seq)) {
+    
+      al_seq = al_seq+1
+    
+      if(hs_raw_seq[k] == '-') {aa_vec <- c(aa_vec,'-')}
+      if(hs_raw_seq[k] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+      al_vec <- c(al_vec,al_seq)
+      
+    }
+    
+    hs_al_map_df <- data.frame(al_vec,aa_vec, aa_vec)
+    colnames(hs_al_map_df) <- c('alignment','phmmer_order','primary')
+    
+    hs_ungapped <- hs_al_map_df[hs_al_map_df[,3] != '-',3]
+    
+    # If hs_seq_range does not match the number of ungapped positions
+    # then this means that there is overlap in the sequence range between
+    # the two segments. However, since we always give the more N-terminal (first)
+    # segments precedence, we can piece together the true sequence range
+    
+    if(length(hs_seq_start_end) > 1) {count <- c(count, accession_pos_native)} # Make a record of number of times human alignment is derived from multiple phmmer segments
+    
+    if(length(hs_ungapped) != length(hs_seq_range)) {
+      
+      if(length(hs_seq_start_end) > 2){
+        
+        if (human_id == 'ENSG00000181222') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000165525') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000107651') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000105675') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000173545') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000149657') {next} # Manually confirmed lack of conservation
+        stop()
+        
+      }
+      
+      seq_len_diff <- length(hs_seq_range) - length(hs_ungapped)
+      
+      if (human_id == 'ENSG00000108592') {next} # Manually confirmed lack of conservation
+      if (human_id == 'ENSG00000156313') {next} # Manually confirmed lack of conservation
+      
+      sec_seg_start <- as.numeric(rapply(strsplit(hs_seq_start_end[2],split=':'), function(x) x[1]))
+      overlap_seq <- sec_seg_start:(sec_seg_start+seq_len_diff-1)
+      hs_seq_range <- setdiff(hs_seq_range,overlap_seq)
+      
+    }
+    
+    hs_al_map_df[hs_al_map_df[,3] != '-',3] <- hs_seq_range # human primary sequence
+    rownames(hs_al_map_df) <- NULL
+    
+    
+    # Check if the Sc pY match the Hs pY
+    
+    sc_pY_human_Y_pos_range <- hs_al_map_df[hs_al_map_df[,1] %in% (pY_al_pos_start:pY_al_pos_end),3] # the human primary sequence position that maps to the phosphorylated pY in S. cerevisiae
+    sc_pY_human_Y_pos_range <- as.numeric(sc_pY_human_Y_pos_range[sc_pY_human_Y_pos_range != '-']) # the human primary sequence position that is actually phosphorylated
+
+    human_pY_pos <- human_al_Y_seq_Y[j,3]
+  
+    if(human_pY_pos %in% sc_pY_human_Y_pos_range) {
+        test_vec <- c(accession,native,pos,pY_al_pos,unlist(human_al_Y_seq_Y[j,]))
+        test_df <- rbind(test_df,test_vec)
+    }
+    
+    
+  }
+  
+}
+
+colnames(test_df) <- c('sc_accesion','native','sc_pos', 'pos (alignment)','ensembl', 'hs_accession', 'hs_pos','window')
+test_df_nr <- test_df[!duplicated(test_df[,c(1,2,3)]),]
+
+hs_sc_hc_pos3 <- test_df_nr
+sc_hc_pos3 <- length(candidate_human_pY_vec) # the number of sites that map to a protein that has at least one orthologue in human that has at least one pY
+
+# Less than 5% overlap between Sc pY and Hs pY at the position level
+
+nrow(hs_sc_hc_pos3)/sc_hc_pos3
+
+# Write out the list of S. cerevisiae sites that align to human
+
+```
+
+# As before but this time in an alignment window of +/- 5
+
+```{r}
+
+# yeast pY ortholog tbale
+
+sc_hs_df_phospho <- read.table('sc_hs_df_phospho.txt') # orthologue table for the spurious phosphosites
+
+# human pY table (PS >= 5)
+
+hs_pY_high_conf_ensembl <- read.table('hs_pY_high_conf_ensembl.txt',head=T) # High-confidence human pY with Ensembl IDs (PSP >= 5)
+
+# Set the threshold difference for the alignment window
+
+match_diff <- 5
+
+# At this stage it would be best to work with the unfiltered phmmer alignment than the filtered alignment
+
+al_files <- list.files("~/Documents/Work/HFSP_evolution/phmmer_processed") # directory of alignment files derived from phmmer
+al_files <- al_files[grep('compiled.fa',al_files)]
+al_file_IDs <- rapply(strsplit(al_files,split='_'), function(x) x[1])
+
+test_df <- NULL
+candidate_human_vec <- NULL
+candidate_human_pY_vec <- NULL
+
+count = NULL
+
+for (i in 1:length(accession_pos_native_vec)) {
+  
+  print(i)
+  
+  accession_pos_native <- accession_pos_native_vec[i]
+  accession <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[1]) # accession
+  pos <- readr::parse_number(rapply(strsplit(accession_pos_native,split='_'), function(x) x[2])) # position
+  native <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[3]) # native status
+  
+  # Do not consider native sites
+  
+  if (native == 'Yes') {next}
+  
+  # Read in the alignment
+  
+  al_file <- al_files[al_file_IDs %in% accession]
+  
+  # If there is no file here that means the protein does not have a human orthologue; skip 
+  if(length(al_file) != 1) (next)
+  
+  al_fas <- seqinr::read.fasta(al_file,seqtype='AA')
+  al_fas_names <- rapply(strsplit(names(al_fas),split=':'), function(x) x[1])
+  
+  # Retrieve the cerevisiae sequence
+  
+  sc_seq <- al_fas[al_fas_names %in% accession]
+  if(length(sc_seq) != 1) {stop('There is a problem here (wrong number of Sc sequences)')}
+  
+  sc_seq_range <- rapply(strsplit(rapply(strsplit(names(sc_seq),split=':'), function(x) x[2]),split='/'), function(x) x[2])
+  sc_start <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[1])) # start of sc sequence
+  sc_end <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[2])) # end of of sc sequence
+  
+  if(length(sc_start) != 1) {stop('Too many start positions')}
+  if(length(sc_end) != 1) {stop('Too many end positions')}
+  
+  sc_len <- sc_end-sc_start+1 #length of the S. cerevisiae sequences
+  
+  sc_raw_seq <- unlist(seqinr::getSequence(sc_seq))
+  sc_raw_seq <- toupper(sc_raw_seq)
+  sc_raw_seq_ungapped <- sc_raw_seq[-grep('-',sc_raw_seq)]
+  if(length(sc_raw_seq_ungapped) != sc_len) {stop('Length of the sequence is not as expected')}
+ 
+  # quickly construct an alignment mapping table (between S. cerevisiae seq and alignment)
+  
+  aa_vec <- NULL
+  al_vec <- NULL
+  aa_seq = 0
+  al_seq = 0
+  
+  for (j in 1:length(sc_raw_seq)) {
+    
+    al_seq = al_seq+1
+    
+    if(sc_raw_seq[j] == '-') {aa_vec <- c(aa_vec,'-')}
+    if(sc_raw_seq[j] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+    al_vec <- c(al_vec,al_seq)
+    
+  }
+  
+  al_map_df <- data.frame(al_vec,aa_vec)
+  colnames(al_map_df) <- c('alignment','primary') # alignment numbering vs. primary sequence numbering
+  rownames(al_map_df) <- NULL
+  
+  # alignment position for pY
+  
+  pY_al_pos <- al_map_df[al_map_df[,2] == pos,1] # 'pos' is the phosphosite position
+  pY_al_pos_start <- pY_al_pos-match_diff # start position of the alignment window
+  pY_al_pos_end <- pY_al_pos+match_diff # end position of the alignment window
+  
+  # correct for the fact that the sequence window may extend above r below the alignment length
+  
+  if(pY_al_pos_start < 1) {pY_al_pos_start <- 1}
+  if(pY_al_pos_end > length(sc_raw_seq)) {pY_al_pos_end <- length(sc_raw_seq)}
+  
+  # Find the human orthologue in the alignment
+  
+  sc_hs_df_phospho <- sc_hs_df_phospho
+  
+  human_ortho <- sc_hs_df_phospho[sc_hs_df_phospho[,1] %in% accession,2]
+  human_fas <- al_fas[al_fas_names %in% human_ortho]
+  human_fas_id <- rapply(strsplit(names(human_fas),split=':'), function(x) x[1])
+  
+  # Skip if there are no human orthologues in the alignment 
+  
+  if (length(human_fas) == 0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog - not necessarily phosphorylated)
+  
+  ####
+  candidate_human_vec <- c(candidate_human_vec,accession_pos_native)
+  ####
+  
+  # Retrieve the positions that align with the pY
+  
+  human_fas_al <- rapply(human_fas, function(x) x[pY_al_pos])
+  
+  # Skip at this point if none of the alignment positions contain a Y
+   
+  human_fas_al_Y <- human_fas_al#[human_fas_al %in% 'Y']  ## Actually do not filter for Y alignments at this step (it is not necessary)
+  human_fas_al_Y_id <- rapply(strsplit(names(human_fas_al_Y),split=':'), function(x) x[1])
+  
+  if(length(human_fas_al_Y) == 0) {next}
+  
+  # 
+  
+  hs_pY_high_conf_ensembl <- hs_pY_high_conf_ensembl  # High-confidence human pY with Ensembl IDs (PSP >= 5)
+  
+  human_al_Y_seq_Y <- hs_pY_high_conf_ensembl[hs_pY_high_conf_ensembl[,1] %in% human_fas_al_Y_id,] # Retrieve the known pY phosphosites for the human orthologs   
+ 
+  # Skip if none of the human orthologues are pY phosphorylated (PSP >= 5)
+  if(nrow(human_al_Y_seq_Y)==0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog that is pY-phosphorylated)
+  
+  ###  
+  candidate_human_pY_vec <- c(candidate_human_pY_vec,accession_pos_native)
+  ###
+  
+  # Iterate through each human pY protein and map between the sequence and the alignment
+  
+  for (j in 1:nrow(human_al_Y_seq_Y)) {
+    
+    human_id <- human_al_Y_seq_Y[j,1]
+    
+    # Reconstruct the sequence range of the human protein from the phmmer annotation
+    
+    hs_seq_start_end <- rapply(strsplit(names(human_fas[human_fas_id %in% human_id]),split='/'), function(x) x[2])
+    hs_seq_start_end <- unlist(strsplit(hs_seq_start_end,split='_'))
+    hs_seq_start_end <- gsub('-',':',hs_seq_start_end)
+    
+    hs_seq_range <- NULL
+    
+    for (k in 1:length(hs_seq_start_end)) {
+      hs_seq_range <- c(hs_seq_range,eval(str2lang(hs_seq_start_end[k])))
+    }
+    
+    # Extract the human sequence
+    
+    hs_raw_seq <- unlist(seqinr::getSequence(human_fas[human_fas_id %in% human_id]))
+    hs_raw_seq <- toupper(hs_raw_seq)
+    
+    aa_vec <- NULL
+    al_vec <- NULL
+    aa_seq = 0
+    al_seq = 0
+     
+    # alignment mapping table between the alignment and the order of the human sequence as it is outputted by phmmer
+    
+    for (k in 1:length(hs_raw_seq)) {
+    
+      al_seq = al_seq+1
+    
+      if(hs_raw_seq[k] == '-') {aa_vec <- c(aa_vec,'-')}
+      if(hs_raw_seq[k] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+      al_vec <- c(al_vec,al_seq)
+      
+    }
+    
+    hs_al_map_df <- data.frame(al_vec,aa_vec, aa_vec)
+    colnames(hs_al_map_df) <- c('alignment','phmmer_order','primary')
+    
+    hs_ungapped <- hs_al_map_df[hs_al_map_df[,3] != '-',3]
+    
+    # If hs_seq_range does not match the number of ungapped positions
+    # then this means that there is overlap in the sequence range between
+    # the two segments. However, since we always give the more N-terminal (first)
+    # segments precedence, we can piece together the true sequence range
+    
+    if(length(hs_seq_start_end) > 1) {count <- c(count, accession_pos_native)} # Make a record of number of times human alignment is derived from multiple phmmer segments
+    
+    if(length(hs_ungapped) != length(hs_seq_range)) {
+      
+      if(length(hs_seq_start_end) > 2){
+        
+        if (human_id == 'ENSG00000181222') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000165525') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000107651') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000105675') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000173545') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000149657') {next} # Manually confirmed lack of conservation
+        stop()
+        
+      }
+      
+      seq_len_diff <- length(hs_seq_range) - length(hs_ungapped)
+      
+       if (human_id == 'ENSG00000108592') {next} # Manually confirmed lack of conservation
+       if (human_id == 'ENSG00000156313') {next} # Manually confirmed lack of conservation
+      
+      sec_seg_start <- as.numeric(rapply(strsplit(hs_seq_start_end[2],split=':'), function(x) x[1]))
+      overlap_seq <- sec_seg_start:(sec_seg_start+seq_len_diff-1)
+      hs_seq_range <- setdiff(hs_seq_range,overlap_seq)
+      
+    }
+    
+    hs_al_map_df[hs_al_map_df[,3] != '-',3] <- hs_seq_range # human primary sequence
+    rownames(hs_al_map_df) <- NULL
+    
+    
+    # Check if the Sc pY match the Hs pY
+    
+    sc_pY_human_Y_pos_range <- hs_al_map_df[hs_al_map_df[,1] %in% (pY_al_pos_start:pY_al_pos_end),3] # the human primary sequence position that maps to the phosphorylated pY in S. cerevisiae
+    sc_pY_human_Y_pos_range <- as.numeric(sc_pY_human_Y_pos_range[sc_pY_human_Y_pos_range != '-']) # the human primary sequence position that is actually phosphorylated
+
+    human_pY_pos <- human_al_Y_seq_Y[j,3]
+  
+    if(human_pY_pos %in% sc_pY_human_Y_pos_range) {
+        test_vec <- c(accession,native,pos,pY_al_pos,unlist(human_al_Y_seq_Y[j,]))
+        test_df <- rbind(test_df,test_vec)
+    }
+    
+    
+  }
+  
+}
+
+colnames(test_df) <- c('sc_accesion','native','sc_pos', 'pos (alignment)','ensembl', 'hs_accession', 'hs_pos','window')
+test_df_nr <- test_df[!duplicated(test_df[,c(1,2,3)]),]
+
+hs_sc_hc_pos5 <- test_df_nr
+sc_hc_pos5 <- length(candidate_human_pY_vec) # the number of sites that map to a protein that has at least one orthologue in human that has at least one pY
+
+# Less than 5% overlap between Sc pY and Hs pY at the position level
+
+nrow(hs_sc_hc_pos5)/sc_hc_pos5
+
+# Write out the list of S. cerevisiae sites that align to human
+
+```
+
+# As before but this time in an alignment window of +/- 7
+
+```{r}
+
+# yeast pY ortholog tbale
+
+sc_hs_df_phospho <- read.table('sc_hs_df_phospho.txt') # orthologue table for the spurious phosphosites
+
+# human pY table (PS >= 5)
+
+hs_pY_high_conf_ensembl <- read.table('hs_pY_high_conf_ensembl.txt',head=T) # High-confidence human pY with Ensembl IDs (PSP >= 5)
+
+# Set the threshold difference for the alignment window
+
+match_diff <- 7
+
+# At this stage it would be best to work with the unfiltered phmmer alignment than the filtered alignment
+
+al_files <- list.files("~/Documents/Work/HFSP_evolution/phmmer_processed") # directory of alignment files derived from phmmer
+al_files <- al_files[grep('compiled.fa',al_files)]
+al_file_IDs <- rapply(strsplit(al_files,split='_'), function(x) x[1])
+
+test_df <- NULL
+candidate_human_vec <- NULL
+candidate_human_pY_vec <- NULL
+
+count = NULL
+
+for (i in 1:length(accession_pos_native_vec)) {
+  
+  print(i)
+  
+  accession_pos_native <- accession_pos_native_vec[i]
+  accession <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[1]) # accession
+  pos <- readr::parse_number(rapply(strsplit(accession_pos_native,split='_'), function(x) x[2])) # position
+  native <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[3]) # native status
+  
+  # Do not consider native sites
+  
+  if (native == 'Yes') {next}
+  
+  # Read in the alignment
+  
+  al_file <- al_files[al_file_IDs %in% accession]
+  
+  # If there is no file here that means the protein does not have a human orthologue; skip 
+  if(length(al_file) != 1) (next)
+  
+  al_fas <- seqinr::read.fasta(al_file,seqtype='AA')
+  al_fas_names <- rapply(strsplit(names(al_fas),split=':'), function(x) x[1])
+  
+  # Retrieve the cerevisiae sequence
+  
+  sc_seq <- al_fas[al_fas_names %in% accession]
+  if(length(sc_seq) != 1) {stop('There is a problem here (wrong number of Sc sequences)')}
+  
+  sc_seq_range <- rapply(strsplit(rapply(strsplit(names(sc_seq),split=':'), function(x) x[2]),split='/'), function(x) x[2])
+  sc_start <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[1])) # start of sc sequence
+  sc_end <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[2])) # end of of sc sequence
+  
+  if(length(sc_start) != 1) {stop('Too many start positions')}
+  if(length(sc_end) != 1) {stop('Too many end positions')}
+  
+  sc_len <- sc_end-sc_start+1 #length of the S. cerevisiae sequences
+  
+  sc_raw_seq <- unlist(seqinr::getSequence(sc_seq))
+  sc_raw_seq <- toupper(sc_raw_seq)
+  sc_raw_seq_ungapped <- sc_raw_seq[-grep('-',sc_raw_seq)]
+  if(length(sc_raw_seq_ungapped) != sc_len) {stop('Length of the sequence is not as expected')}
+ 
+  # quickly construct an alignment mapping table (between S. cerevisiae seq and alignment)
+  
+  aa_vec <- NULL
+  al_vec <- NULL
+  aa_seq = 0
+  al_seq = 0
+  
+  for (j in 1:length(sc_raw_seq)) {
+    
+    al_seq = al_seq+1
+    
+    if(sc_raw_seq[j] == '-') {aa_vec <- c(aa_vec,'-')}
+    if(sc_raw_seq[j] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+    al_vec <- c(al_vec,al_seq)
+    
+  }
+  
+  al_map_df <- data.frame(al_vec,aa_vec)
+  colnames(al_map_df) <- c('alignment','primary') # alignment numbering vs. primary sequence numbering
+  rownames(al_map_df) <- NULL
+  
+  # alignment position for pY
+  
+  pY_al_pos <- al_map_df[al_map_df[,2] == pos,1] # 'pos' is the phosphosite position
+  pY_al_pos_start <- pY_al_pos-match_diff # start position of the alignment window
+  pY_al_pos_end <- pY_al_pos+match_diff # end position of the alignment window
+  
+  # correct for the fact that the sequence window may extend above r below the alignment length
+  
+  if(pY_al_pos_start < 1) {pY_al_pos_start <- 1}
+  if(pY_al_pos_end > length(sc_raw_seq)) {pY_al_pos_end <- length(sc_raw_seq)}
+  
+  # Find the human orthologue in the alignment
+  
+  sc_hs_df_phospho <- sc_hs_df_phospho
+  
+  human_ortho <- sc_hs_df_phospho[sc_hs_df_phospho[,1] %in% accession,2]
+  human_fas <- al_fas[al_fas_names %in% human_ortho]
+  human_fas_id <- rapply(strsplit(names(human_fas),split=':'), function(x) x[1])
+  
+  # Skip if there are no human orthologues in the alignment 
+  
+  if (length(human_fas) == 0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog - not necessarily phosphorylated)
+  
+  ####
+  candidate_human_vec <- c(candidate_human_vec,accession_pos_native)
+  ####
+  
+  # Retrieve the positions that align with the pY
+  
+  human_fas_al <- rapply(human_fas, function(x) x[pY_al_pos])
+  
+  # Skip at this point if none of the alignment positions contain a Y
+   
+  human_fas_al_Y <- human_fas_al#[human_fas_al %in% 'Y']  ## Actually do not filter for Y alignments at this step (it is not necessary)
+  human_fas_al_Y_id <- rapply(strsplit(names(human_fas_al_Y),split=':'), function(x) x[1])
+  
+  if(length(human_fas_al_Y) == 0) {next}
+  
+  # 
+  
+  hs_pY_high_conf_ensembl <- hs_pY_high_conf_ensembl  # High-confidence human pY with Ensembl IDs (PSP >= 5)
+  
+  human_al_Y_seq_Y <- hs_pY_high_conf_ensembl[hs_pY_high_conf_ensembl[,1] %in% human_fas_al_Y_id,] # Retrieve the known pY phosphosites for the human orthologs   
+ 
+  # Skip if none of the human orthologues are pY phosphorylated (PSP >= 5)
+  if(nrow(human_al_Y_seq_Y)==0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog that is pY-phosphorylated)
+  
+  ###  
+  candidate_human_pY_vec <- c(candidate_human_pY_vec,accession_pos_native)
+  ###
+  
+  # Iterate through each human pY protein and map between the sequence and the alignment
+  
+  for (j in 1:nrow(human_al_Y_seq_Y)) {
+    
+    human_id <- human_al_Y_seq_Y[j,1]
+    
+    # Reconstruct the sequence range of the human protein from the phmmer annotation
+    
+    hs_seq_start_end <- rapply(strsplit(names(human_fas[human_fas_id %in% human_id]),split='/'), function(x) x[2])
+    hs_seq_start_end <- unlist(strsplit(hs_seq_start_end,split='_'))
+    hs_seq_start_end <- gsub('-',':',hs_seq_start_end)
+    
+    hs_seq_range <- NULL
+    
+    for (k in 1:length(hs_seq_start_end)) {
+      hs_seq_range <- c(hs_seq_range,eval(str2lang(hs_seq_start_end[k])))
+    }
+    
+    # Extract the human sequence
+    
+    hs_raw_seq <- unlist(seqinr::getSequence(human_fas[human_fas_id %in% human_id]))
+    hs_raw_seq <- toupper(hs_raw_seq)
+    
+    aa_vec <- NULL
+    al_vec <- NULL
+    aa_seq = 0
+    al_seq = 0
+     
+    # alignment mapping table between the alignment and the order of the human sequence as it is outputted by phmmer
+    
+    for (k in 1:length(hs_raw_seq)) {
+    
+      al_seq = al_seq+1
+    
+      if(hs_raw_seq[k] == '-') {aa_vec <- c(aa_vec,'-')}
+      if(hs_raw_seq[k] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+      al_vec <- c(al_vec,al_seq)
+      
+    }
+    
+    hs_al_map_df <- data.frame(al_vec,aa_vec, aa_vec)
+    colnames(hs_al_map_df) <- c('alignment','phmmer_order','primary')
+    
+    hs_ungapped <- hs_al_map_df[hs_al_map_df[,3] != '-',3]
+    
+    # If hs_seq_range does not match the number of ungapped positions
+    # then this means that there is overlap in the sequence range between
+    # the two segments. However, since we always give the more N-terminal (first)
+    # segments precedence, we can piece together the true sequence range
+    
+    if(length(hs_seq_start_end) > 1) {count <- c(count, accession_pos_native)} # Make a record of number of times human alignment is derived from multiple phmmer segments
+    
+  #  if(human_id == 'ENSG00000157087') {stop('problem')}
+    
+    if(length(hs_ungapped) != length(hs_seq_range)) {
+      
+      if(length(hs_seq_start_end) > 2){
+        
+        if (human_id == 'ENSG00000181222') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000165525') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000107651') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000105675') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000173545') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000149657') {next} # Manually confirmed lack of conservation
+        stop('problem')
+        
+      }
+      
+      seq_len_diff <- length(hs_seq_range) - length(hs_ungapped)
+      
+       if (human_id == 'ENSG00000108592') {next} # Manually confirmed lack of conservation
+       if (human_id == 'ENSG00000156313') {next} # Manually confirmed lack of conservation
+      
+      sec_seg_start <- as.numeric(rapply(strsplit(hs_seq_start_end[2],split=':'), function(x) x[1]))
+      overlap_seq <- sec_seg_start:(sec_seg_start+seq_len_diff-1)
+      hs_seq_range <- setdiff(hs_seq_range,overlap_seq)
+      
+    }
+    
+    hs_al_map_df[hs_al_map_df[,3] != '-',3] <- hs_seq_range # human primary sequence
+    rownames(hs_al_map_df) <- NULL
+    
+    
+    # Check if the Sc pY match the Hs pY
+    
+    sc_pY_human_Y_pos_range <- hs_al_map_df[hs_al_map_df[,1] %in% (pY_al_pos_start:pY_al_pos_end),3] # the human primary sequence position that maps to the phosphorylated pY in S. cerevisiae
+    sc_pY_human_Y_pos_range <- as.numeric(sc_pY_human_Y_pos_range[sc_pY_human_Y_pos_range != '-']) # the human primary sequence position that is actually phosphorylated
+
+    human_pY_pos <- human_al_Y_seq_Y[j,3]
+  
+    if(human_pY_pos %in% sc_pY_human_Y_pos_range) {
+        test_vec <- c(accession,native,pos,pY_al_pos,unlist(human_al_Y_seq_Y[j,]))
+        test_df <- rbind(test_df,test_vec)
+    }
+    
+    
+  }
+  
+}
+
+colnames(test_df) <- c('sc_accesion','native','sc_pos', 'pos (alignment)','ensembl', 'hs_accession', 'hs_pos','window')
+test_df_nr <- test_df[!duplicated(test_df[,c(1,2,3)]),]
+
+hs_sc_hc_pos7 <- test_df_nr
+sc_hc_pos7 <- length(candidate_human_pY_vec) # the number of sites that map to a protein that has at least one orthologue in human that has at least one pY
+
+# Less than 5% overlap between Sc pY and Hs pY at the position level
+
+nrow(hs_sc_hc_pos7)/sc_hc_pos7
+
+# Write out the list of S. cerevisiae sites that align to human
+
+```
+
+# As before but this time in an alignment window of +/- 9
+
+```{r}
+
+# yeast pY ortholog tbale
+
+sc_hs_df_phospho <- read.table('sc_hs_df_phospho.txt') # orthologue table for the spurious phosphosites
+
+# human pY table (PS >= 5)
+
+hs_pY_high_conf_ensembl <- read.table('hs_pY_high_conf_ensembl.txt',head=T) # High-confidence human pY with Ensembl IDs (PSP >= 5)
+
+# Set the threshold difference for the alignment window
+
+match_diff <- 9
+
+# At this stage it would be best to work with the unfiltered phmmer alignment than the filtered alignment
+
+al_files <- list.files("~/Documents/Work/HFSP_evolution/phmmer_processed") # directory of alignment files derived from phmmer
+al_files <- al_files[grep('compiled.fa',al_files)]
+al_file_IDs <- rapply(strsplit(al_files,split='_'), function(x) x[1])
+
+test_df <- NULL
+candidate_human_vec <- NULL
+candidate_human_pY_vec <- NULL
+
+count = NULL
+
+for (i in 1:length(accession_pos_native_vec)) {
+  
+  print(i)
+  
+  accession_pos_native <- accession_pos_native_vec[i]
+  accession <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[1]) # accession
+  pos <- readr::parse_number(rapply(strsplit(accession_pos_native,split='_'), function(x) x[2])) # position
+  native <- rapply(strsplit(accession_pos_native,split='_'), function(x) x[3]) # native status
+  
+  # Do not consider native sites
+  
+  if (native == 'Yes') {next}
+  
+  # Read in the alignment
+  
+  al_file <- al_files[al_file_IDs %in% accession]
+  
+  # If there is no file here that means the protein does not have a human orthologue; skip 
+  if(length(al_file) != 1) (next)
+  
+  al_fas <- seqinr::read.fasta(al_file,seqtype='AA')
+  al_fas_names <- rapply(strsplit(names(al_fas),split=':'), function(x) x[1])
+  
+  # Retrieve the cerevisiae sequence
+  
+  sc_seq <- al_fas[al_fas_names %in% accession]
+  if(length(sc_seq) != 1) {stop('There is a problem here (wrong number of Sc sequences)')}
+  
+  sc_seq_range <- rapply(strsplit(rapply(strsplit(names(sc_seq),split=':'), function(x) x[2]),split='/'), function(x) x[2])
+  sc_start <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[1])) # start of sc sequence
+  sc_end <- as.numeric(rapply(strsplit(sc_seq_range,split='-'), function(x) x[2])) # end of of sc sequence
+  
+  if(length(sc_start) != 1) {stop('Too many start positions')}
+  if(length(sc_end) != 1) {stop('Too many end positions')}
+  
+  sc_len <- sc_end-sc_start+1 #length of the S. cerevisiae sequences
+  
+  sc_raw_seq <- unlist(seqinr::getSequence(sc_seq))
+  sc_raw_seq <- toupper(sc_raw_seq)
+  sc_raw_seq_ungapped <- sc_raw_seq[-grep('-',sc_raw_seq)]
+  if(length(sc_raw_seq_ungapped) != sc_len) {stop('Length of the sequence is not as expected')}
+ 
+  # quickly construct an alignment mapping table (between S. cerevisiae seq and alignment)
+  
+  aa_vec <- NULL
+  al_vec <- NULL
+  aa_seq = 0
+  al_seq = 0
+  
+  for (j in 1:length(sc_raw_seq)) {
+    
+    al_seq = al_seq+1
+    
+    if(sc_raw_seq[j] == '-') {aa_vec <- c(aa_vec,'-')}
+    if(sc_raw_seq[j] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+    al_vec <- c(al_vec,al_seq)
+    
+  }
+  
+  al_map_df <- data.frame(al_vec,aa_vec)
+  colnames(al_map_df) <- c('alignment','primary') # alignment numbering vs. primary sequence numbering
+  rownames(al_map_df) <- NULL
+  
+  # alignment position for pY
+  
+  pY_al_pos <- al_map_df[al_map_df[,2] == pos,1] # 'pos' is the phosphosite position
+  pY_al_pos_start <- pY_al_pos-match_diff # start position of the alignment window
+  pY_al_pos_end <- pY_al_pos+match_diff # end position of the alignment window
+  
+  # correct for the fact that the sequence window may extend above r below the alignment length
+  
+  if(pY_al_pos_start < 1) {pY_al_pos_start <- 1}
+  if(pY_al_pos_end > length(sc_raw_seq)) {pY_al_pos_end <- length(sc_raw_seq)}
+  
+  # Find the human orthologue in the alignment
+  
+  sc_hs_df_phospho <- sc_hs_df_phospho
+  
+  human_ortho <- sc_hs_df_phospho[sc_hs_df_phospho[,1] %in% accession,2]
+  human_fas <- al_fas[al_fas_names %in% human_ortho]
+  human_fas_id <- rapply(strsplit(names(human_fas),split=':'), function(x) x[1])
+  
+  # Skip if there are no human orthologues in the alignment 
+  
+  if (length(human_fas) == 0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog - not necessarily phosphorylated)
+  
+  ####
+  candidate_human_vec <- c(candidate_human_vec,accession_pos_native)
+  ####
+  
+  # Retrieve the positions that align with the pY
+  
+  human_fas_al <- rapply(human_fas, function(x) x[pY_al_pos])
+  
+  # Skip at this point if none of the alignment positions contain a Y
+   
+  human_fas_al_Y <- human_fas_al#[human_fas_al %in% 'Y']  ## Actually do not filter for Y alignments at this step (it is not necessary)
+  human_fas_al_Y_id <- rapply(strsplit(names(human_fas_al_Y),split=':'), function(x) x[1])
+  
+  if(length(human_fas_al_Y) == 0) {next}
+  
+  # 
+  
+  hs_pY_high_conf_ensembl <- hs_pY_high_conf_ensembl  # High-confidence human pY with Ensembl IDs (PSP >= 5)
+  
+  human_al_Y_seq_Y <- hs_pY_high_conf_ensembl[hs_pY_high_conf_ensembl[,1] %in% human_fas_al_Y_id,] # Retrieve the known pY phosphosites for the human orthologs   
+ 
+  # Skip if none of the human orthologues are pY phosphorylated (PSP >= 5)
+  if(nrow(human_al_Y_seq_Y)==0) {next}
+  
+  # At this point make a record of all sites that pass this threshold (have at least one human otholog that is pY-phosphorylated)
+  
+  ###  
+  candidate_human_pY_vec <- c(candidate_human_pY_vec,accession_pos_native)
+  ###
+  
+  # Iterate through each human pY protein and map between the sequence and the alignment
+  
+  for (j in 1:nrow(human_al_Y_seq_Y)) {
+    
+    human_id <- human_al_Y_seq_Y[j,1]
+    
+    # Reconstruct the sequence range of the human protein from the phmmer annotation
+    
+    hs_seq_start_end <- rapply(strsplit(names(human_fas[human_fas_id %in% human_id]),split='/'), function(x) x[2])
+    hs_seq_start_end <- unlist(strsplit(hs_seq_start_end,split='_'))
+    hs_seq_start_end <- gsub('-',':',hs_seq_start_end)
+    
+    hs_seq_range <- NULL
+    
+    for (k in 1:length(hs_seq_start_end)) {
+      hs_seq_range <- c(hs_seq_range,eval(str2lang(hs_seq_start_end[k])))
+    }
+    
+    # Extract the human sequence
+    
+    hs_raw_seq <- unlist(seqinr::getSequence(human_fas[human_fas_id %in% human_id]))
+    hs_raw_seq <- toupper(hs_raw_seq)
+    
+    aa_vec <- NULL
+    al_vec <- NULL
+    aa_seq = 0
+    al_seq = 0
+     
+    # alignment mapping table between the alignment and the order of the human sequence as it is outputted by phmmer
+    
+    for (k in 1:length(hs_raw_seq)) {
+    
+      al_seq = al_seq+1
+    
+      if(hs_raw_seq[k] == '-') {aa_vec <- c(aa_vec,'-')}
+      if(hs_raw_seq[k] != '-') {aa_seq = aa_seq+1;aa_vec <- c(aa_vec,aa_seq)}
+      al_vec <- c(al_vec,al_seq)
+      
+    }
+    
+    hs_al_map_df <- data.frame(al_vec,aa_vec, aa_vec)
+    colnames(hs_al_map_df) <- c('alignment','phmmer_order','primary')
+    
+    hs_ungapped <- hs_al_map_df[hs_al_map_df[,3] != '-',3]
+    
+    # If hs_seq_range does not match the number of ungapped positions
+    # then this means that there is overlap in the sequence range between
+    # the two segments. However, since we always give the more N-terminal (first)
+    # segments precedence, we can piece together the true sequence range
+    
+    if(length(hs_seq_start_end) > 1) {count <- c(count, accession_pos_native)} # Make a record of number of times human alignment is derived from multiple phmmer segments
+    
+  #  if(human_id == 'ENSG00000157087') {stop('problem')}
+    
+    if(length(hs_ungapped) != length(hs_seq_range)) {
+      
+      if(length(hs_seq_start_end) > 2){
+        
+        if (human_id == 'ENSG00000181222') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000165525') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000107651') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000105675') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000173545') {next} # Manually confirmed lack of conservation
+        if (human_id == 'ENSG00000149657') {next} # Manually confirmed lack of conservation
+        stop('problem')
+        
+      }
+      
+      seq_len_diff <- length(hs_seq_range) - length(hs_ungapped)
+      
+       if (human_id == 'ENSG00000108592') {next} # Manually confirmed lack of conservation
+       if (human_id == 'ENSG00000156313') {next} # Manually confirmed lack of conservation
+      
+      sec_seg_start <- as.numeric(rapply(strsplit(hs_seq_start_end[2],split=':'), function(x) x[1]))
+      overlap_seq <- sec_seg_start:(sec_seg_start+seq_len_diff-1)
+      hs_seq_range <- setdiff(hs_seq_range,overlap_seq)
+      
+    }
+    
+    hs_al_map_df[hs_al_map_df[,3] != '-',3] <- hs_seq_range # human primary sequence
+    rownames(hs_al_map_df) <- NULL
+    
+    
+    # Check if the Sc pY match the Hs pY
+    
+    sc_pY_human_Y_pos_range <- hs_al_map_df[hs_al_map_df[,1] %in% (pY_al_pos_start:pY_al_pos_end),3] # the human primary sequence position that maps to the phosphorylated pY in S. cerevisiae
+    sc_pY_human_Y_pos_range <- as.numeric(sc_pY_human_Y_pos_range[sc_pY_human_Y_pos_range != '-']) # the human primary sequence position that is actually phosphorylated
+
+    human_pY_pos <- human_al_Y_seq_Y[j,3]
+  
+    if(human_pY_pos %in% sc_pY_human_Y_pos_range) {
+        test_vec <- c(accession,native,pos,pY_al_pos,unlist(human_al_Y_seq_Y[j,]))
+        test_df <- rbind(test_df,test_vec)
+    }
+    
+    
+  }
+  
+}
+
+colnames(test_df) <- c('sc_accesion','native','sc_pos', 'pos (alignment)','ensembl', 'hs_accession', 'hs_pos','window')
+test_df_nr <- test_df[!duplicated(test_df[,c(1,2,3)]),]
+
+hs_sc_hc_pos9 <- test_df_nr
+sc_hc_pos9 <- length(candidate_human_pY_vec) # the number of sites that map to a protein that has at least one orthologue in human that has at least one pY
+
+# Less than 5% overlap between Sc pY and Hs pY at the position level
+
+nrow(hs_sc_hc_pos9)/sc_hc_pos9
+
+# Write out the list of S. cerevisiae sites that align to human
+
+```
+
+## ggplot how the conservation (sc pY : Hs pY) changes with rspect to the alignment window (high confidence)
+
+```{r}
+
+hc_cons_0 <- nrow(hs_sc_hc_pos0)/sc_hc_pos0 
+hc_cons_3 <- nrow(hs_sc_hc_pos3)/sc_hc_pos3
+hc_cons_5 <- nrow(hs_sc_hc_pos5)/sc_hc_pos5
+hc_cons_7 <- nrow(hs_sc_hc_pos7)/sc_hc_pos7
+hc_cons_9 <- nrow(hs_sc_hc_pos9)/sc_hc_pos9
+
+hc_cons_0 <- hc_cons_0*100
+hc_cons_3 <- hc_cons_3*100
+hc_cons_5 <- hc_cons_5*100
+hc_cons_7 <- hc_cons_7*100
+hc_cons_9 <- hc_cons_9*100
+
+num_vec <- c(hc_cons_0,hc_cons_3,hc_cons_5,hc_cons_7,hc_cons_9)
+df <- data.frame(class=c("+/- 0", "+/- 3", "+/- 5", "+/- 7", "+/- 9"),num=num_vec)
+
+df$class <- factor(df$class, levels = c("+/- 0", "+/- 3", "+/- 5", "+/- 7", "+/- 9"))
+
+write.table(df,file='S8C_df.txt',quote=F,row.names=F)
+
+p <- ggplot(df, aes(x=class, y=num, fill = class, width=.5)) + geom_bar(color=NA, lwd=0, stat='identity',alpha=0.4) + scale_fill_manual(values = rep(colors()[551],5))
+p <- p+theme_bw() 
+p <- p+theme(axis.text.y=element_text(size=9),axis.text.x=element_text(size=8.5),axis.title.x=element_text(size=4.5,face="plain"),axis.title.y=element_text(size=11,face="bold"),plot.title=element_text(size=12,face='bold'))
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p + coord_cartesian(ylim = c(0, 20))
+p <- p + ylab("% conservation with human pY") + xlab("") + ggtitle('site-level')
+p <- p + theme(legend.position = "none")
+p <- p + theme(panel.border= element_blank())
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p
+
+ggsave(file='S8C.pdf', plot=p, width=3.75, height=3.2)
+
+```
