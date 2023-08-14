@@ -325,7 +325,7 @@ hs_pY_high_conf_ensembl_id <- unique(hs_pY_uniprot_ensembl[,2])
 
 # For proteins that were found to be phosphorylated in our dataset
 
-setwd("~/Documents/Work/HFSP_evolution/ensembl_vertebrate_orthologs")
+setwd("")
 
 hs_pY_ortho_vec <- NULL
 
@@ -356,7 +356,7 @@ for (i in 1:length(accession_vec)) {
 
 # For proteins that were not found to be phosphorylated in our dataset
 
-setwd("~/Documents/Work/HFSP_evolution/ensembl_nonphos_vertebrate_orthologs")
+setwd("")
 
 for (i in 1:length(accession_vec)) {
   
