@@ -1,0 +1,6 @@
+class num
+yeast pY 147
+yeast pY: human 
+ (observed) 72
+yeast pY: human 
+ (expected) 70.4299754299754
