@@ -1,0 +1,265 @@
+---
+title: "Figure S9b"
+author: "David Bradley"
+date: '2023-02-23'
+output: html_document
+---
+
+# Code to generate the species tree for the species of interest, which serves as an input for the phylogenetic independence contrasts (PIC) method for
+# the correction of phylogenetic non-indpendence when using quantitiative data for species that ar linked by a phylogeny.
+
+# Iterate through all of the set of orthologues and rertrieve those that contain at least one sequence for the species
+# that we want to use to construct the species tree.
+
+```{r}
+
+setwd("") # directory of files containing all of the compiled orthologs
+fas_files <- list.files()[grep('.fa',list.files())]
+fas_files_omni <- fas_files[omni_dex]
+
+species_full_names <- c(c('acanthaster_planci','amphimedon_queenslandica','branchiostoma_lanceolatum',
+                        'caenorhabditis_elegans','capitella_teleta','drosophila_melanogaster','danio_rerio','gallus_gallus','helobdella_robusta',
+                        'homo_sapiens','ixodes_scapularis','lottia_gigantea','lingula_anatina','canis_lupus','mizuhopecten_yessoensis',
+                        'nematostella_vectensis','strongylocentrotus_purpuratus','trichoplax_adhaerens','xenopus_tropicalis','coprinopsis_cinerea','allomyces_macrogynus','schizosaccharomyces_pombe','spizellomyces_punctatus','ustilago_maydis'))
+
+length_vec <- NULL
+
+for (i in 1:length(fas_files_omni)) {
+  
+  print(i)
+  
+  fas_file_omni <- fas_files_omni[i]
+  seq <- seqinr::read.fasta(fas_file_omni,seqtype = 'AA')
+  name_seq_species <- rapply(strsplit(names(seq),split=':'), function(x) x[2])
+  
+  seq_name_vec <- NULL
+  species_seq_vec <- NULL
+  
+  for (j in 1:length(species_full_names)) {
+    
+    species <- species_full_names[j]
+    grep_dex <- grep(species,name_seq_species)
+    seq_name <- name_seq_species[grep_dex]
+    seq_species <- seq[grep_dex]
+    seq_name <- rapply(strsplit(seq_name,split='\\.'), function(x) x[1])
+    seq_name <- rapply(strsplit(seq_name,split='_'), function(x) paste(x[1],x[2],sep='_'))
+    seq_name_vec <- c(seq_name_vec, seq_name)
+    species_seq_vec <- c(species_seq_vec, seq_species)
+  }
+  
+  seq_name_vec <- unique(seq_name_vec)
+  if(length(seq_name_vec) != length(species_full_names)) {stop()}
+  
+  species_seq_vec <- c(seq[1],species_seq_vec)
+  
+  
+  ## write the file
+  
+  file_name <- gsub('.fa','_omni.fa',fas_file_omni)
+  seqinr::write.fasta(species_seq_vec,names=names(species_seq_vec),file=file_name)
+  
+  length_vec <- c(length_vec,length(species_seq_vec))
+    
+}
+
+```
+
+# Align each set of orthologues using MAFFT L-INS-i
+
+```{r}
+
+setwd("~/Documents/Work/HFSP_proteomes/species_tree")
+
+omni_files <- list.files()
+omni_files <- omni_files[grep('omni.fa',omni_files)]
+
+for (i in 1:length(omni_files)) {
+  
+  print(i)
+  
+  seq <- seqinr::read.fasta(omni_files[i],seqtype = 'AA')
+  if(length(seq) >= 100) {next}
+  omni_file <- omni_files[i]
+  omni_al_file <- gsub('.fa','_al.fa',omni_files[i])
+  
+  mafft_com <- paste('mafft --localpair --maxiterate 1000',omni_file,'>',omni_al_file)
+  system(mafft_com)
+  
+}
+
+```
+
+# Run trimal to remove alignment positions that contain more than 20% gaps
+
+```{r}
+
+omni_files <- list.files()
+omni_files <- omni_files[grep('omni_al.fa',omni_files)]
+
+for (i in 1:length(omni_files)) {
+  
+  print(i)
+  
+  omni_al_file <- omni_files[i]
+  omni_trim_file <- gsub('_al.fa','_al_trim.fa',omni_al_file)
+  html_path <- gsub('_al.fa','_al_trim.html',omni_al_file)
+  colnum_path <- gsub('_al.fa','_al_trim.txt',omni_al_file)
+    
+  trimal_com <- paste('/home/david/Documents/Software/trimal-trimAl/source/trimal','-in',omni_al_file,'-out',omni_trim_file,'-htmlout',html_path,'-gt 0.80  -colnumbering -fasta -keepseqs -keepheader','>',colnum_path)
+  system(trimal_com)
+
+}
+
+```
+
+# Remove detected homologs that align to less than 50% of the S. cerevisiae sequence (i.e. the query sequence).
+
+```{r}
+
+omni_files <- list.files()
+omni_files <- omni_files[grep('omni_al_trim.fa',omni_files)]
+
+keep_vec <- NULL
+
+for (i in 1:length(omni_files)) {
+  
+  print(i)
+  
+  omni_trim_file <- omni_files[i]
+  omni_trim_filter_file <- gsub('_al_trim.fa','_al_trim_50pc.fa',omni_trim_file)
+  
+  fas <- seqinr::read.fasta(omni_trim_file, seqtype='AA')
+  sc_fas <- fas[[1]]
+  
+  sc_aa_dex <- which(unlist(seqinr::getSequence(sc_fas)) != '-')
+    
+  # The portion of the sequences that align to the scerevisiae sequence
+  
+  sc_align_seq <- lapply(fas, function(x) x[sc_aa_dex])
+  sc_seq_len <- length(sc_align_seq[[1]])
+  sc_gap_num <- rapply(sc_align_seq, function(x) length(grep('-',x)))
+  
+  sc_50_dex <- which(sc_gap_num < (sc_seq_len/2))
+  gap_50_dex <- which(sc_gap_num >= (sc_seq_len/2))
+  sc_50_fas <- fas[sc_50_dex]
+  
+  # Record fraction of sequences that were retained
+  
+  keep_frac <- length(sc_50_fas)/length(fas)
+  keep_vec <- c(keep_vec, keep_frac)
+  
+  # Write to file
+  out_path <- paste('/home/david/Documents/Work/HFSP_proteomes/','species_tree/',omni_trim_filter_file,sep='')
+  
+  seqinr::write.fasta(sc_50_fas,names=names(sc_50_fas),file=out_path)
+  
+}
+
+```
+
+# Retain one sequence per species from each set of alignments (use 50% filter as an input). Alwyas reatin the sequence with the highest identity
+# to the S. cerevisiae copy.
+
+```{r}
+
+omni_files <- list.files()
+omni_files <- omni_files[grep('_al_trim_50pc.fa',omni_files)]
+
+len_vec <- NULL
+
+for (i in 1:length(omni_files)) {
+  
+  print(i)
+  
+  omni_file <- omni_files[i]
+  seq <- bio3d::read.fasta(omni_file)
+  
+  seq_id <- seq$id 
+  species <- rapply(strsplit(seq_id,split='\\:'), function(x) x[2])
+  species <- rapply(strsplit(species,split='_'), function(x) paste(x[1],'_',x[2],sep=''))
+  species <- rapply(strsplit(species,split='\\.'), function(x) x[1])
+  
+  if (length(unlist(strsplit(seq_id[1],split=':'))) != 2) {stop()}  
+  
+  species[1] <- 'saccharomyces_cerevisiae'
+  
+  sc_identity <- bio3d::seqidentity(seq)[1,]
+  
+  sc_identity_species <- sc_identity
+  names(sc_identity_species) <- species
+  
+  seq$id <- seq$id[order(sc_identity,decreasing=T)]
+  seq$ali <- seq$ali[order(sc_identity,decreasing=T),]
+  sc_identity <- sort(sc_identity,decreasing=T)
+  sc_identity_species <- sort(sc_identity_species,decreasing=T)
+  
+  ##
+  
+  sc_identity_unique <- sc_identity[!duplicated(names(sc_identity_species))]
+  sc_identity_species_unique <- sc_identity_species[!duplicated(names(sc_identity_species))]
+  seq$id <- seq$id[!duplicated(names(sc_identity_species))]
+  seq$ali <- seq$ali[!duplicated(names(sc_identity_species)),]
+  
+  ####
+  
+  len_vec <- c(len_vec, length(sc_identity_species_unique))
+  
+  # Skip if we do not have all of the species that we need for this analysis
+  
+  if(length(sc_identity_species_unique) != 25) {next}
+  if(length(seq$id) != 25) {stop()}
+  
+  outfile <- gsub('trim_50pc.fa','trim_50pc_all_species.fa',omni_file)
+  
+  bio3d::write.fasta(alignment=seq, ids=seq$id, seqs=seq$ali, gap=TRUE, file=outfile, append = FALSE)
+  
+}
+
+# Select only for the files that have all of the species that we are analysing
+
+```
+
+# Run iqtree to construct the species tree using the 'supermatrix' approach
+
+```{r}
+
+'iqtree2 -p /home/david/Documents/Work/HFSP_proteomes/IQTREE_consensus --prefix concat -B 1000 -T AUTO'
+
+# the -p parameter refers to the directory containing the set of alignments that are used to construct the species tree.
+
+```
+
+# Visualise the species tree that we get from iqtree2 and annotate with ggtree
+
+```{r}
+
+tree <- treeio::read.newick('/home/david/Documents/Work/HFSP_proteomes/iqtree_supermatrix/concat_rooted.treefile') 
+
+old_tips <- tree$tip.label
+new_tips <- stringr::str_to_title(old_tips)
+new_tips <-  gsub('_',' ',new_tips)
+data <- data.frame(old_tips,new_tips)
+tree <- rename_taxa(tree, data, key = 1, value = 2)
+
+p <- ggtree(tree) + geom_tiplab(size=3.2) + geom_treescale()
+p <- p+xlim(NA, 3.25)
+p <- p + geom_cladelab(node=44, label="chordates", align=F,  offset = 1.45, textcolor=colors()[131], barcolor=colors()[131], barsize=1.2,extend=0.2, hjust=-0.1, fontsize=3.5) 
+p <- p + geom_cladelab(node=43, label="echinoderms", align=F,  offset = 1.475, textcolor=colors()[131], barcolor=colors()[131], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5) 
+p <- p + geom_cladelab(node=38, label="molluscs", align=F,  offset = 1.44, textcolor=colors()[131], barcolor=colors()[131], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5) 
+p <- p + geom_cladelab(node=9, label="brachiopods", align=F,  offset = 1.51, textcolor=colors()[131], barcolor=colors()[131], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5)
+p <- p + geom_cladelab(node=39, label="annelids", align=F,  offset = 1.258, textcolor=colors()[131], barcolor=colors()[131], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5)
+p <- p + geom_cladelab(node=40, label="arthropods/\nnematodes", align=F,  offset = 1.2, textcolor=colors()[131], barcolor=colors()[131], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5)
+p <- p + geom_cladelab(node=49, label="placozoa/\ncnidaria", align=F,  offset = 1.45, textcolor=colors()[131], barcolor=colors()[131], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5)
+p <- p + geom_cladelab(node=25, label="porifera", align=F,  offset = 1.528, textcolor=colors()[131], barcolor=colors()[131], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5)
+p <- p + geom_cladelab(node=31, label="ascomycota", align=F,  offset = 1.23, textcolor=colors()[142], barcolor=colors()[142], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5)
+p <- p + geom_cladelab(node=30, label="basidiomycota", align=F,  offset = 1.6, textcolor=colors()[142], barcolor=colors()[142], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5)
+p <- p + geom_cladelab(node=28, label="chytridiomycota", align=F,  offset = 1.5, textcolor=colors()[142], barcolor=colors()[142], barsize=1.2,extend=0.2,  hjust=-0.1, fontsize=3.5)
+
+ggtree(tree) + geom_text(aes(label=node))  
+  
+```
+
+
+
+
+

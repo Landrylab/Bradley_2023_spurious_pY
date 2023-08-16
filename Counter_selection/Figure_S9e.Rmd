@@ -1,0 +1,474 @@
+---
+title: "Figure_S9e"
+author: "David Bradley"
+date: '2023-02-23'
+output: html_document
+---
+
+```{r}
+
+# Run Kinannote on all of the proteomes
+
+## N.B We can run Kinannote directly on the compressed file. 
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  tag <- metazoa_names[i]
+  
+  mkdir_command <- paste('mkdir',tag)
+  system(mkdir_command)
+  
+  proteome <- metazoa_genomes[i]
+  
+  perl_com <- paste('perl /home/david/Documents/Software/Kinannote_1.0/Kinannote_1.0/Kinannote_1.0.pl -m -c',tag,proteome)
+  system(perl_com)
+  
+  tag_files <- list.files()[grep(tag,list.files())]
+  tag_files <- setdiff(tag_files,proteome)
+  
+  mv_com <- paste('mv',tag_files,tag)
+  
+  for (j in 1:length(mv_com)) {
+    system(mv_com[j])
+  }
+  
+}
+
+```
+
+# Retrieve the number of tyrosine kinases for each proteome
+
+```{r}
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+TK_num_vec <- NULL
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  tag <- metazoa_names[i]
+  proteome <- metazoa_genomes[i]
+  
+  tag_proteome <- paste(tag,proteome,sep='/')
+  tag_proteome <- gsub('.gz','.names',tag_proteome)
+  
+  kin_list <- read.table(tag_proteome) 
+  kin_class <- rapply(strsplit(kin_list[,2],split='/'), function(x)x[1])
+  TK_num <- length(which(kin_class == 'TK'))
+  TK_num_vec <- c(TK_num_vec, TK_num)
+  
+}
+
+# Add the 6 fungal specoes
+
+names(TK_num_vec) <- metazoa_names
+TK_num_vec <- c(0,0,0,0,0,0,TK_num_vec)
+
+```
+
+# Y content of fungal genomes
+
+```{r}
+
+fungi_proteomes <- list.files('~/Documents/Work/HFSP_proteomes/fungi_proteomes')
+fungi_proteomes <- fungi_proteomes[grep('.gz',fungi_proteomes)]
+fungi_names <- rapply(strsplit(fungi_proteomes,split='_'), function(x) x[1])
+fungi_full_names <- c('allomyces_macrogynus','coprinopsis_cinerea','saccharomyces_cerevisiae','schizosaccharomyces_pombe','spizellomyces_punctatus',
+              'ustilago_maydis')
+
+fas_files <- list.files()[grep('.fa',list.files())] # Directory of all files containing the compiled orthologues
+
+# Put all orthologs in one file:
+
+'cat *all_orthologs.fa > all_orthologs_single_file.fa'
+
+fas <- seqinr::read.fasta('/home/david/Documents/Work/HFSP_evolution/all_orthologs_single_file.fa')
+fas_names <- rapply(strsplit(names(fas),split='\\:'), function(x) x[2])
+fas_names <- rapply(strsplit(fas_names,split='\\.'),function(x)x[1])
+
+######
+
+setwd("~/Documents/Work/HFSP_proteomes/fungi_proteomes")
+
+Y_freq_df <- NULL
+Y_freq_non_ortho_df <- NULL
+
+options(warn=2)
+
+# Iterate through each one of the fungal proteomes, distinguish between the orthologs of the spurious substrates and the non-orthologs,
+# and then compute the proteomic AA content.
+
+for (i in 1:length(fungi_proteomes)) {
+  
+  print(i)
+  
+  fungi_proteome <- fungi_proteomes[i]
+  fungi_full_name <- fungi_full_names[i]
+  proteome_fas <- seqinr::read.fasta(fungi_proteome)
+  proteome_fas <- seqinr::getSequence(proteome_fas)
+     
+  ## ortho proteome
+  
+    match_dex <- grep(fungi_full_name,fas_names)
+    if (fungi_full_name == 'saccharomyces_cerevisiae') {match_dex <- grep('Fungi',fas_names)}
+    ortho_seq <- fas[match_dex]
+    ortho_seq <- unique(ortho_seq)
+    freq_table <- table(unname(unlist(ortho_seq)))/sum(table(unname(unlist(ortho_seq))))
+    freq_table <- freq_table[!names(freq_table) %in% c('*','x')]
+    freq_Y <- unname(freq_table[names(freq_table) == 'y'])
+  
+  Y_freq_df <- rbind(Y_freq_df,freq_table)
+  
+  ## non-ortho proteome
+  
+  non_ortho_proteome <- setdiff(proteome_fas,ortho_seq)
+  if(length(non_ortho_proteome) == length(proteome_fas)) {stop()}
+  freq_table <- table(unname(unlist(non_ortho_proteome)))/sum(table(unname(unlist(non_ortho_proteome))))
+  freq_table <- freq_table[!names(freq_table) %in% c('*','x')]
+  nonortho_freq_Y <- unname(freq_table[names(freq_table) == 'y'])
+  
+  Y_freq_non_ortho_df <- rbind(Y_freq_non_ortho_df,freq_table)
+  
+}
+
+rownames(Y_freq_df) <- fungi_names
+rownames(Y_freq_non_ortho_df) <- fungi_names
+
+```
+
+# Y content of metazoa genomes
+
+```{r}
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_genomes <- metazoa_genomes[-c(3,13)]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+metazoa_full_names <- c('acanthaster_planci','amphimedon_queenslandica','branchiostoma_lanceolatum', 'caenorhabditis_elegans','canis_lupus','capitella_teleta','drosophila_melanogaster','danio_rerio','gallus_gallus','helobdella_robusta',
+                        'homo_sapiens','ixodes_scapularis','lottia_gigantea','lingula_anatina','mizuhopecten_yessoensis',
+                        'nematostella_vectensis','strongylocentrotus_purpuratus','trichoplax_adhaerens','xenopus_tropicalis')
+
+
+# Iterate through each one of the metazoan proteomes, distinguish between the orthologs of the spurious substrates and the non-orthologs,
+# and then compute the proteomic AA content.
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  metazoa_proteome <- metazoa_genomes[i]
+  metazoa_full_name <- metazoa_full_names[i]
+  proteome_fas <- seqinr::read.fasta(metazoa_proteome)
+  proteome_fas <- seqinr::getSequence(proteome_fas)
+  
+   ## ortho proteome
+   
+    match_dex <- grep(metazoa_full_name,fas_names)
+    if (fungi_full_name == 'saccharomyces_cerevisiae') {match_dex <- grep('Fungi',fas_names)}
+    ortho_seq <- fas[match_dex]
+    ortho_seq <- unique(ortho_seq)
+    freq_table <- table(unname(unlist(ortho_seq)))/sum(table(unname(unlist(ortho_seq))))
+    freq_table <- freq_table[!names(freq_table) %in% c('*','x','u','b','z')]
+    freq_Y <- unname(freq_table[names(freq_table) == 'y'])
+  
+  Y_freq_df <- rbind(Y_freq_df,freq_table)
+  
+  ## non-ortho proteome
+  
+  non_ortho_proteome <- setdiff(proteome_fas,ortho_seq)
+  if(length(non_ortho_proteome) == length(proteome_fas)) {stop()}
+  freq_table <- table(unname(unlist(non_ortho_proteome)))/sum(table(unname(unlist(non_ortho_proteome))))
+  freq_table <- freq_table[!names(freq_table) %in% c('*','x','u','b','z')]
+  nonortho_freq_Y <- unname(freq_table[names(freq_table) == 'y'])
+  
+  Y_freq_non_ortho_df <- rbind(Y_freq_non_ortho_df,freq_table)
+  
+}
+
+rownames(Y_freq_df)[7:nrow(Y_freq_df)] <- metazoa_names
+rownames(Y_freq_non_ortho_df)[7:nrow(Y_freq_non_ortho_df)] <- metazoa_names
+
+```
+
+# Perform Phylogenetic Independence Contrasts (Y only)
+
+```{r}
+
+# Performing the PIC analysis is surprisingly easy. Data: 
+
+TK_num_vec
+
+# Use the full species names so that we can match the data to the tree
+
+spec_nom <- c('allomyces_macrogynus','coprinopsis_cinerea','saccharomyces_cerevisiae','schizosaccharomyces_pombe','spizellomyces_punctatus',
+              'ustilago_maydis','acanthaster_planci','amphimedon_queenslandica','branchiostoma_lanceolatum', 'caenorhabditis_elegans','canis_lupus','capitella_teleta','drosophila_melanogaster','danio_rerio','gallus_gallus','helobdella_robusta',
+                        'homo_sapiens','ixodes_scapularis','lottia_gigantea','lingula_anatina','mizuhopecten_yessoensis',
+                        'nematostella_vectensis','strongylocentrotus_purpuratus','trichoplax_adhaerens','xenopus_tropicalis')
+
+TK_num_vec <- TK_num_vec[-c(9,19)]
+names(TK_num_vec) <- spec_nom
+rownames(Y_freq_df) <- spec_nom
+
+# PIC
+
+tre <- ape::read.tree('concat_rooted.treefile')  # Load in tree
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_df[,20], tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+
+# No ignificant correlation
+
+pic_df <- data.frame(tk_pic,y_pic)
+colnames(pic_df) <- c('TK','Y')
+pic_df_ortho <- pic_df
+
+p <- ggplot(pic_df, aes(x=TK, y=Y)) + geom_point(fill='black', stroke=0.001, shape=21, alpha=1, size=4, colour='transparent') 
+p <- p+geom_smooth(method=lm, se=FALSE, col='red', lwd=0.6)
+p <- p+theme_bw() 
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=11,face="bold"),axis.title.y=element_text(size=11,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p + xlab('Y kinase contrasts') + ylab('Y content contrasts') + ggtitle('')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.title=element_text(size=8.5),legend.text = element_text(size=10))
+p <- p + geom_richtext(x = 42, y = 0.0023, label = 'r^2 = 0.036', check_overlap = TRUE, size=4.0, label.color = NA)
+
+ggsave(file='Figure_S9e_Y.pdf', plot=p, width=3.0, height=3.0)
+
+```
+
+# Perform Phylogenetic Independence Contrasts (All AAs)
+
+```{r}
+
+# Performing the PIC analysis is surprisingly easy. Data: 
+
+TK_num_vec
+
+# Use the full species names so that we can match the data to the tree
+
+spec_nom <- c('allomyces_macrogynus','coprinopsis_cinerea','saccharomyces_cerevisiae','schizosaccharomyces_pombe','spizellomyces_punctatus',
+              'ustilago_maydis','acanthaster_planci','amphimedon_queenslandica','branchiostoma_lanceolatum', 'caenorhabditis_elegans','canis_lupus','capitella_teleta','drosophila_melanogaster','danio_rerio','gallus_gallus','helobdella_robusta',
+                        'homo_sapiens','ixodes_scapularis','lottia_gigantea','lingula_anatina','mizuhopecten_yessoensis',
+                        'nematostella_vectensis','strongylocentrotus_purpuratus','trichoplax_adhaerens','xenopus_tropicalis')
+
+names(TK_num_vec) <- spec_nom
+rownames(Y_freq_df) <- spec_nom
+
+# PIC
+
+tre <- ape::read.tree('concat_rooted.treefile')  # Load in tree
+
+# Does not work because the tree needs to be rooted for PIC
+
+ortho_cor_vec <- NULL
+ortho_p_vec <- NULL
+
+for (i in 1:20) {
+
+  tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+  y_pic <- ape::pic(Y_freq_df[,i], tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+  
+  # No correlation
+  
+  pic_df <- data.frame(tk_pic,y_pic)
+  colnames(pic_df) <- c('TK','Y')
+  pic_df_ortho <- pic_df
+  
+  cor <- cor.test(pic_df[,1],pic_df[,2])$estimate
+  p_value <- cor.test(pic_df[,1],pic_df[,2])$p.value
+  
+  ortho_cor_vec <- c(ortho_cor_vec,cor)
+  ortho_p_vec <- c(ortho_p_vec,p_value)
+  
+}
+
+ortho_cor_p_df <- data.frame(ortho_cor_vec,ortho_p_vec)
+rownames(ortho_cor_p_df) <- toupper(colnames(Y_freq_df))
+ortho_cor_p_df_ordered <- ortho_cor_p_df[order(ortho_cor_p_df[,1],decreasing=F),]
+
+```
+
+# Perform Phylogenetic Independence Contrasts (All AAs and for non-orthologs)
+
+```{r}
+
+# Performing the PIC analysis is surprisingly easy. Data: 
+
+TK_num_vec
+
+# Use the full species names so that we can match the data to the tree
+
+spec_nom <- c('allomyces_macrogynus','coprinopsis_cinerea','saccharomyces_cerevisiae','schizosaccharomyces_pombe','spizellomyces_punctatus',
+              'ustilago_maydis','acanthaster_planci','amphimedon_queenslandica','branchiostoma_lanceolatum', 'caenorhabditis_elegans','canis_lupus','capitella_teleta','drosophila_melanogaster','danio_rerio','gallus_gallus','helobdella_robusta',
+                        'homo_sapiens','ixodes_scapularis','lottia_gigantea','lingula_anatina','mizuhopecten_yessoensis',
+                        'nematostella_vectensis','strongylocentrotus_purpuratus','trichoplax_adhaerens','xenopus_tropicalis')
+
+names(TK_num_vec) <- spec_nom
+rownames(Y_freq_non_ortho_df) <- spec_nom
+
+# PIC
+
+tre <- ape::read.tree('concat_rooted.treefile')  # Load in tree
+
+# Does not work because the tree needs to be rooted for PIC
+
+non_ortho_cor_vec <- NULL
+non_ortho_p_vec <- NULL
+
+for (i in 1:20) {
+
+  tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+  y_pic <- ape::pic(Y_freq_non_ortho_df[,i], tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+  
+  # No correlation
+  
+  pic_df <- data.frame(tk_pic,y_pic)
+  colnames(pic_df) <- c('TK','Y')
+  pic_df_ortho <- pic_df
+  
+  cor <- cor.test(pic_df[,1],pic_df[,2])$estimate
+  p_value <- cor.test(pic_df[,1],pic_df[,2])$p.value
+  
+  non_ortho_cor_vec <- c(non_ortho_cor_vec,cor)
+  non_ortho_p_vec <- c(non_ortho_p_vec,p_value)
+  
+}
+
+non_ortho_cor_p_df <- data.frame(non_ortho_cor_vec,non_ortho_p_vec)
+rownames(non_ortho_cor_p_df) <- toupper(colnames(Y_freq_df))
+non_ortho_cor_p_df_ordered <- non_ortho_cor_p_df[order(non_ortho_cor_p_df[,1],decreasing=F),]
+
+```
+
+# Difference between ortho and non-ortho
+
+```{r}
+
+cor_diff <- ortho_cor_p_df[,1] - non_ortho_cor_p_df[,1]
+names(cor_diff) <- colnames(Y_freq_df)
+
+# write out the frequency tables
+
+colnames(ortho_cor_p_df) <- c('cor','p_value')
+write.table(ortho_cor_p_df,file='ortho_contrast_correlations.txt',quote=F)
+
+colnames(non_ortho_cor_p_df) <- c('cor','p_value')
+write.table(non_ortho_cor_p_df,file='non_ortho_contrast_correlations.txt',quote=F)
+
+write.table(cor_diff,file='cor_diff.txt',quote=F,col.names=F)
+
+```
+
+# facet_wrap (Y)
+
+```{r}
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_df[,20], tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+pic_df_ortho <- data.frame(tk_pic,y_pic)  
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_non_ortho_df[,20], tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+pic_df_non_ortho <- data.frame(tk_pic,y_pic)   
+
+pic_df_ortho_gg <- data.frame(pic_df_ortho,'pY orthologs')
+pic_df_non_ortho_gg <- data.frame(pic_df_non_ortho,'rest of proteome')
+colnames(pic_df_ortho_gg) <- c('TK','Y','class')
+colnames(pic_df_non_ortho_gg) <- c('TK','Y','class')
+
+pic_df_ortho_non_ortho <- rbind(pic_df_ortho_gg,pic_df_non_ortho_gg)
+
+p <- ggplot(pic_df_ortho_non_ortho, aes(x=TK, y=Y)) + geom_point(fill='black', stroke=0.001, shape=21, alpha=1, size=4, colour='transparent') + facet_wrap(vars(class),nrow=2)
+p <- p+geom_smooth(method=lm, se=FALSE, col='purple', lwd=0.6)
+p <- p+theme_bw() 
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=12,face="bold"),axis.title.y=element_text(size=12,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p + xlab('Y kinase contrasts') + ylab('Proteome Y contrasts') + ggtitle('')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.title=element_text(size=8.5),legend.text = element_text(size=10))
+p <- p+geom_richtext(aes(x, y, label=lab), data=data.frame(x=39.5, y=0.00675, lab=c("r = -0.25","r = -0.189"),class=c('pY orthologs','rest of proteome'), vjust=1), label.color = NA) 
+
+ggsave(file='Figure_S9e_Y_facet_wrap.pdf', plot=p, width=3.5, height=6.0)
+
+```
+
+# facet_wrap (D)
+
+```{r}
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_df[,3], tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+pic_df_ortho <- data.frame(tk_pic,y_pic)  
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_non_ortho_df[,3], tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+pic_df_non_ortho <- data.frame(tk_pic,y_pic)   
+
+pic_df_ortho_gg <- data.frame(pic_df_ortho,'pY orthologs')
+pic_df_non_ortho_gg <- data.frame(pic_df_non_ortho,'rest of proteome')
+colnames(pic_df_ortho_gg) <- c('TK','Y','class')
+colnames(pic_df_non_ortho_gg) <- c('TK','Y','class')
+
+pic_df_ortho_non_ortho <- rbind(pic_df_ortho_gg,pic_df_non_ortho_gg)
+
+p <- ggplot(pic_df_ortho_non_ortho, aes(x=TK, y=Y)) + geom_point(fill='black', stroke=0.001, shape=21, alpha=1, size=4, colour='transparent') + facet_wrap(vars(class),nrow=2)
+p <- p+geom_smooth(method=lm, se=FALSE, col='red', lwd=0.6)
+p <- p+theme_bw() 
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=12,face="bold"),axis.title.y=element_text(size=12,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p + xlab('Y kinase contrasts') + ylab('Proteome D contrasts') + ggtitle('')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.title=element_text(size=8.5),legend.text = element_text(size=10))
+p <- p+geom_richtext(aes(x, y, label=lab), data=data.frame(x=39.5, y=0.00695, lab=c("r = -0.297","r = -0.015"),class=c('pY orthologs','rest of proteome'), vjust=1), label.color = NA) 
+
+ggsave(file='Figure_S9e_D_facet_wrap.pdf', plot=p, width=3.5, height=6.0)
+
+```
+
+# facet_wrap (F)
+
+```{r}
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_df[,5], tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+pic_df_ortho <- data.frame(tk_pic,y_pic)  
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_non_ortho_df[,5], tre, scaled = TRUE, var.contrasts = FALSE, rescaled.tree = FALSE)
+pic_df_non_ortho <- data.frame(tk_pic,y_pic)   
+
+pic_df_ortho_gg <- data.frame(pic_df_ortho,'pY orthologs')
+pic_df_non_ortho_gg <- data.frame(pic_df_non_ortho,'rest of proteome')
+colnames(pic_df_ortho_gg) <- c('TK','Y','class')
+colnames(pic_df_non_ortho_gg) <- c('TK','Y','class')
+
+pic_df_ortho_non_ortho <- rbind(pic_df_ortho_gg,pic_df_non_ortho_gg)
+
+p <- ggplot(pic_df_ortho_non_ortho, aes(x=TK, y=Y)) + geom_point(fill='black', stroke=0.001, shape=21, alpha=1, size=4, colour='transparent') + facet_wrap(vars(class))
+p <- p+geom_smooth(method=lm, se=FALSE, col='brown', lwd=0.6)
+p <- p+theme_bw() 
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=12,face="bold"),axis.title.y=element_text(size=12,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p + xlab('Y kinase contrasts') + ylab('Proteome F contrasts') + ggtitle('')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.title=element_text(size=8.5),legend.text = element_text(size=10))
+p <- p+geom_richtext(aes(x, y, label=lab), data=data.frame(x=39.5, y=0.00695, lab=c("r = -0.310","r = -0.312"),class=c('pY orthologs','rest of proteome'), vjust=1), label.color = NA) 
+
+ggsave(file='Figure_S9e_F_facet_wrap.pdf', plot=p, width=6.0, height=3.5)
+
+```
+

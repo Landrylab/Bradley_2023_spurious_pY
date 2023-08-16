@@ -1,0 +1,174 @@
+---
+title: "Figure_S9a"
+author: "David Bradley"
+date: '2023-02-23'
+output: html_document
+---
+
+# Run Kinannote on the reference proteomes for each of the species used in Tan et al, 2009
+
+```{r}
+
+# Run Kinannote on all of the proteomes
+
+## N.B We can run Kinannote directly on the compressed proteome sequence file.
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  tag <- metazoa_names[i]
+  
+  mkdir_command <- paste('mkdir',tag)
+  system(mkdir_command)
+  
+  proteome <- metazoa_genomes[i]
+  
+  perl_com <- paste('perl /home/david/Documents/Software/Kinannote_1.0/Kinannote_1.0/Kinannote_1.0.pl -m -c',tag,proteome)
+  system(perl_com)
+  
+  tag_files <- list.files()[grep(tag,list.files())]
+  tag_files <- setdiff(tag_files,proteome)
+  
+  mv_com <- paste('mv',tag_files,tag)
+  
+  for (j in 1:length(mv_com)) {
+    system(mv_com[j])
+  }
+  
+}
+
+```
+
+# Retrieve the number of tyrosine kinases for each proteome
+
+```{r}
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+TK_num_vec <- NULL
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  print(i)
+  
+  tag <- metazoa_names[i]
+  proteome <- metazoa_genomes[i]
+  
+  tag_proteome <- paste(tag,proteome,sep='/')
+  tag_proteome <- gsub('.gz','.names',tag_proteome)
+  
+  kin_list <- read.table(tag_proteome) 
+  kin_class <- rapply(strsplit(kin_list[,2],split='/'), function(x)x[1])
+  TK_num <- length(which(kin_class == 'TK'))
+  TK_num_vec <- c(TK_num_vec, TK_num)
+  
+}
+
+names(TK_num_vec) <- metazoa_names
+
+```
+
+# Y content of metazoa genomes
+
+```{r}
+
+metazoa_genomes <- list.files()[grep('.gz',list.files())]
+metazoa_names <- rapply(strsplit(metazoa_genomes,split='_'),function(x)x[1])
+
+Y_freq_vec <- NULL
+
+for (i in 1:length(metazoa_genomes)) {
+  
+  proteome <- metazoa_genomes[i]
+  
+  fas <- seqinr::read.fasta(proteome,seqtype='AA')
+  freq_table <- table(unname(unlist(fas)))/sum(table(unname(unlist(fas))))
+  freq_Y <- unname(freq_table[names(freq_table) == 'Y'])
+  
+  Y_freq_vec <- c(Y_freq_vec,freq_Y)
+  
+}
+
+names(Y_freq_vec) <- metazoa_names
+
+```
+
+## ggplot of the correlation
+
+```{r}
+
+library(ggplot2)
+library(ggtext)
+
+reg_df <- data.frame(TK_num_vec,Y_freq_vec)
+colnames(reg_df) <- c('Kinase','Y')
+
+p <- ggplot(reg_df, aes(x=Kinase, y=Y)) + geom_point() + geom_smooth(method=lm, se=FALSE)
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=11,face="bold"),axis.title.y=element_text(size=11,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p+theme(legend.position="none")
+p <- p + ylab("Proteome Y (relative frequency)") + xlab("No. of predicted Y kinases") + ggtitle('')
+p <- p + geom_richtext(x = 97, y = 0.0335, label='r<sup>2</sup> = 0.69', check_overlap = TRUE, size=4.5, label.color = NA)
+
+ggsave(file='Y_kinases_vs_pY_tan_2009_rep_figure.pdf', plot=p, width=3.0, height=3.0)
+
+```
+
+# Perform Phylogenetic Independence Contrasts
+
+```{r}
+
+# Performing the PIC analysis is surprisingly easy. Data: 
+
+TK_num_vec
+Y_freq_vec
+
+# Use the full species names so that we can match the data to the tree
+
+spec_nom <- c('anopheles_gambiae','bos_taurus','caenorhabditis_elegans','canis_lupus','ciona_intestinalis',
+              'drosophila_melanogaster','danio_rerio','gallus_gallus','homo_sapiens',
+                        'mus_musculus','pan_troglodytes','rattus_norvegicus','saccharomyces_cerevisiae','tetraodon_nigroviridis',
+                        'takifugu_rubripes','xenopus_tropicalis')
+
+names(TK_num_vec) <- spec_nom
+names(Y_freq_vec) <- spec_nom
+
+# PIC
+
+tre <- ape::read.tree('/home/david/Documents/Work/HFSP_tan_2009_rep/iqtree_supermatrix/concat_rooted.treefile')  # Load in tree
+
+tk_pic <- ape::pic(TK_num_vec, tre, scaled = T, var.contrasts = FALSE, rescaled.tree = FALSE)
+y_pic <- ape::pic(Y_freq_vec, tre, scaled = T, var.contrasts = FALSE, rescaled.tree = FALSE)
+
+# No correlation
+
+pic_df <- data.frame(tk_pic,y_pic)
+colnames(pic_df) <- c('TK','Y')
+
+library(ggtext)
+
+p <- ggplot(pic_df, aes(x=TK, y=Y)) + geom_point(fill='black', stroke=0.001, shape=21, alpha=1, size=4, colour='transparent') 
+p <- p+geom_smooth(method=lm, se=FALSE, col='red', lwd=0.6)
+p <- p+theme_bw() 
+# Ticks
+p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")), axis.text.y = element_text(margin=unit(c(0.2,0.2,0.2,0.2), "cm")))
+p <- p+theme_bw() + theme(text=element_text(face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=9),axis.title.x=element_text(size=11,face="bold"),axis.title.y=element_text(size=11,face="bold"),plot.title=element_text(size=18,face='bold'))
+p <- p + xlab('Y kinase contrasts') + ylab('Y content contrasts') + ggtitle('')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p + theme(legend.title=element_text(size=8.5),legend.text = element_text(size=10))
+p <- p + geom_richtext(x = 55, y = 0.0028, label = 'r^2 = 0.52', check_overlap = TRUE, size=4.5, label.color = NA)
+
+ggsave(file='Figure_S9c', plot=p, width=3.0, height=3.0)
+
+```
+
+
+
+
+
