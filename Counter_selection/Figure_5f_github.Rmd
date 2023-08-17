@@ -1,0 +1,101 @@
+---
+title: "Figure 5f"
+author: "David Bradley"
+date: '2023-05-03'
+output: html_document
+---
+
+```{r}
+
+pel_tab <- read.table('all_sites_pY_parameters_mss.txt', head=T)
+
+```
+
+# Function for displayig the median and inter-quartile range in a violin plot
+
+```{r}
+
+median.quartile <- function(x){
+  out <- quantile(x, probs = c(0.25,0.5,0.75))
+  names(out) <- c("ymin","y","ymax")
+  return(out) 
+}
+
+```
+
+# Plot the difference in Pelican parameters between non-pY and pY sites while stratifying between buried, intermediate, and exposed regions.
+# Remove from the dataset any candidate native pY sites or sites that align with human pY.
+
+```{r}
+
+pel_tab <- read.table('all_sites_pY_parameters_mss.txt', head=T)
+pel_tab_acc_pos <- paste(pel_tab[,1],pel_tab[,4],sep='_')
+
+## native sites
+
+native_sites <- read.table('native_all_Lanz_Leutert_union.txt')
+native_sites <- native_sites[,1]
+
+## spurious pY that align to human pY
+
+sc_py_hs_py_aligned <- read.csv('sc_pY_human_pY_aligned_4F.csv')
+sc_py_hs_py_aligned_sites <- paste(sc_py_hs_py_aligned[,1],sc_py_hs_py_aligned[,3],sep='_')
+
+# sites to exclude (native and human-aligning)
+
+exclude_sites <- unique(c(native_sites,sc_py_hs_py_aligned_sites))
+
+pel_tab <- pel_tab[!pel_tab_acc_pos %in% exclude_sites,]
+
+####
+
+pt_all <- pel_tab[,c(2,9,11,12)]
+colnames(pt_all) <- c('RSA','param','signif','class')
+pt_all <- data.frame(pt_all,0)
+pt_all[pt_all[,1] < 0.2,5] <- 'buried'
+pt_all[pt_all[,1] > 0.4,5] <- 'exposed'
+pt_all[pt_all[,1] >= 0.2 & pt_all[,1] <= 0.4,5] <- 'intermediate'
+
+### 0.05
+
+pt_signif <- pt_all[pt_all[,3] < 0.05,]
+colnames(pt_signif) <- c('RSA','param','signif','phospho','buried')
+
+###
+
+sample_sizes <- table(paste(pt_signif[,4],pt_signif[,5]))
+sample_sizes <- sample_sizes[c(1,4,3,6,2,5)]
+
+###
+
+## We will use ggsignif to plot the significance values. However, ggsignif does not seem to work very well when the data is grouped.
+## Therefore, far below I have constructed a df that allows me to implement ggsignif to calculate the p-values. Then, I will
+# take these p-values and then manually add them to my distributions below.
+
+pt_signif$buried <- factor(pt_signif$buried, levels = c('buried','intermediate','exposed'))
+
+library(ggsignif)
+library(ggplot2)
+
+pt_signif[,4] <- gsub('non_pY','non-pY',pt_signif[,4])
+
+p <- ggplot(pt_signif, aes(x=buried, y=param, fill=phospho)) + geom_violin(color='black', lwd=1.03, width=0.85, position = position_dodge(width = 0.815))
+p <- p+theme_bw()
+p <- p + theme(panel.border= element_blank())
+p <- p + stat_summary(fun.data = median.quartile, color = 'black', lwd=0.90, position = position_dodge(width = 0.80))
+p <- p+scale_fill_manual(values=c(colors()[220],'white'))
+p <- p+xlab('')+ylab(expression(Y[fungi] - Y[metazoa] ~  (pi[ Pelican])))
+p <- p+theme(axis.text=element_text(size=14.75),axis.title.x=element_text(size=11.5,face="plain"),axis.title.y=element_text(size=19,face="plain"),plot.title=element_text(size=12,face='bold'))
+p <- p+guides(fill=guide_legend(""))
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA)))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p + geom_signif(y_position = c(1.08,1.08,1.08), xmin = c(0.8,1.8,2.8), 
+              xmax = c(1.2,2.2,3.2), annotation = c("0.035","1.2e-04","0.077"),
+              tip_length = 0.02)
+p <- p + geom_text(data=data.frame(), aes(x=c(0.78,1.22,1.78,2.22,2.78,3.22), y=rep(1.31,6), label=sample_sizes), size=4, inherit.aes = F)
+
+ggsave(file='Figure_5e.pdf', plot=p, width=5.45, height=3.6)
+
+```
+
+
