@@ -68,9 +68,7 @@ sample_sizes <- sample_sizes[c(1,4,3,6,2,5)]
 
 ###
 
-## We will use ggsignif to plot the significance values. However, ggsignif does not seem to work very well when the data is grouped.
-## Therefore, far below I have constructed a df that allows me to implement ggsignif to calculate the p-values. Then, I will
-# take these p-values and then manually add them to my distributions below.
+## Show the violin plot with the p-values inferred from ggsignif
 
 pt_signif$buried <- factor(pt_signif$buried, levels = c('buried','intermediate','exposed'))
 
@@ -94,7 +92,7 @@ p <- p + geom_signif(y_position = c(1.08,1.08,1.08), xmin = c(0.8,1.8,2.8),
               tip_length = 0.02)
 p <- p + geom_text(data=data.frame(), aes(x=c(0.78,1.22,1.78,2.22,2.78,3.22), y=rep(1.31,6), label=sample_sizes), size=4, inherit.aes = F)
 
-ggsave(file='Figure_5e.pdf', plot=p, width=5.45, height=3.6)
+ggsave(file='Figure_5g.pdf', plot=p, width=5.45, height=3.6)
 
 ```
 
