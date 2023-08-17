@@ -1,0 +1,261 @@
+---
+title: "Figure_S10"
+author: "David Bradley"
+date: '2023-04-12'
+output: html_document
+---
+
+# Parse the data (human)
+
+```{r}
+
+# Human proteome data
+
+sc_prot <- seqinr::read.fasta('HSapiens_UP000005640_9606.fasta.gz',seqtype='AA')
+sc_acc <- rapply(strsplit(names(sc_prot),split='\\|'),function(x) x[2])
+
+# Mobi data
+
+sc_mobi <- read.table('mobidb_result_hs.tsv',sep='\t',head=T)
+
+# Extract the alphafold2 disorder predictions
+
+sc_mobi_af2 <- sc_mobi[sc_mobi[,2] %in% 'prediction-disorder-alphafold',]
+
+# For each accession generate a D/O string reflecting the disorder content
+
+acc_len_vec <- NULL
+D_O_list<- NULL
+
+for (i in 1:nrow(sc_mobi_af2)) {
+  
+  print(i)
+  
+  accession <- sc_mobi_af2[i,1]
+  dis_pred <- sc_mobi_af2[i,3]
+  dis_pred <- gsub('\\..',':',dis_pred)
+  dis_pred <- unlist(strsplit(dis_pred,split=','))
+  dis_pred <- unname(unlist(sapply(dis_pred, function(x) eval(parse(text=x)))))
+  
+  # Extract length of protein
+  acc_len <- length(unlist(seqinr::getSequence(sc_prot[sc_acc %in% accession])))
+  #if(acc_len == 0){stop()}
+  prot_dex <- 1:acc_len
+  
+  # record sequence lengths
+  acc_len_vec <- c(acc_len_vec, acc_len)
+  
+  # order prediction
+  
+  ord_pred <- setdiff(prot_dex,dis_pred)
+  
+  # combine
+  
+  D_vec <- rep('D',length(dis_pred))
+  names(D_vec) <- dis_pred
+  
+  O_vec <- rep('O',length(ord_pred))
+  names(O_vec) <- ord_pred
+  
+  D_O_vec <- c(D_vec, O_vec)
+  D_O_dex <- order(as.numeric(names(D_O_vec)),decreasing=F)
+  D_O_vec <- D_O_vec[D_O_dex]
+  
+  #
+  
+  D_O_list <- c(D_O_list, list(D_O_vec))
+  
+}
+
+names(D_O_list) <- sc_mobi_af2[,1]
+
+# extract residue frequencies separately for the ordered and disordered regions
+
+sc_mobi_prot <- sc_prot[match(names(D_O_list),sc_acc)]
+
+dis_aa <- mapply(function(x,y) y[x == 'D'],D_O_list,sc_mobi_prot)
+ord_aa <- mapply(function(x,y) y[x == 'O'],D_O_list,sc_mobi_prot)
+
+dis_aa_freq <- table(unname(unlist(dis_aa)))/sum(table(unname(unlist(dis_aa))))
+ord_aa_freq <- table(unname(unlist(ord_aa)))/sum(table(unname(unlist(ord_aa))))
+
+```
+
+# Analysis (tyrosine deserts only)
+
+```{r}
+
+AAs <- names(ord_aa_freq)
+
+desert_vec <- NULL
+accession_vec <- NULL
+
+for (i in 1:nrow(sc_mobi_af2)) {
+   
+   print(i)
+   
+   accession <- sc_mobi_af2[i,1]
+   seq <- unlist(seqinr::getSequence(sc_prot[sc_acc %in% accession]))
+   seq_len <- length(seq)
+   
+   if (seq_len < 150) {next}
+   
+   aa_dex <- grep(AAs[20],seq) ## AAs[20] is tyrosine
+   
+   if (length(aa_dex) == 0) {desert_vec <- c(desert_vec,1); accession_vec <- c(accession_vec,accession);next} # automatically designate as a desert protein if the amino acid is completely absent from the protein.
+   
+   ## code for calculating the amino acid distance between tyrosine residues
+   mat <- as.matrix(dist(aa_dex))
+   aa_dist <- mat[row(mat) == col(mat) + 1]
+   
+   # Account for distance to termini
+   start_dist <- aa_dex[1]
+   end_dist <- seq_len-(rev(aa_dex)[1])
+   aa_dist <- c(start_dist,aa_dist,end_dist)
+   
+   # Find maximum distance between Y residues
+   max_dist <- max(aa_dist)
+   
+   desert_frac <- max_dist / seq_len
+   if (desert_frac >= 0.5) {desert_vec <- c(desert_vec,1); accession_vec <- c(accession_vec,accession); next}
+   desert_vec <- c(desert_vec,0)
+   accession_vec <- c(accession_vec,accession)
+   # designate as a tyrosine desert if the distance between Ys is equal or more than 50% of the whole length of the sequence
+   
+}
+
+names(desert_vec) <- accession_vec
+
+Y_deserts <- names(desert_vec[desert_vec == 1])
+Y_non_deserts <- names(desert_vec[desert_vec == 0])
+
+```
+
+# GO enrichment using clusterProfiler
+
+```{r}
+
+library(clusterProfiler)
+library(org.Hs.eg.db)
+
+# Type of keys
+
+keytypes(org.Hs.eg.db)
+
+# GO annotation of all tryosine deserts
+
+ggo <- groupGO(gene     = Y_deserts,
+               OrgDb    = org.Hs.eg.db,
+               ont      = "BP",
+               level    = 3,
+               keyType = 'UNIPROT',
+               readable = TRUE)
+
+# GO enrichment analysis (BP)
+
+ego_bp <- enrichGO(gene          = Y_deserts,
+                universe      = c(Y_deserts,Y_non_deserts),
+                OrgDb         = org.Hs.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.01,
+                qvalueCutoff  = 0.05,
+                keyType = 'UNIPROT',
+        readable      = TRUE)
+head(ego_bp,n=10)
+
+# GO enrichment analysis (MF)
+
+ego_mf <- enrichGO(gene          = Y_deserts,
+                universe      = c(Y_deserts,Y_non_deserts),
+                OrgDb         = org.Hs.eg.db,
+                ont           = "MF",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.01,
+                qvalueCutoff  = 0.05,
+                keyType = 'UNIPROT',
+        readable      = TRUE)
+head(ego_mf,n=10)
+
+```
+
+# Visualisation (human molecular function)
+
+```{r}
+
+# https://yulab-smu.top/biomedical-knowledge-mining-book/enrichplot.html
+
+library(clusterProfiler)
+library(enrichplot)
+library(ggupset)
+library(viridis)
+library(viridisLite)
+library(circlize)
+
+edo <- pairwise_termsim(ego_mf)
+emapplot(edo)
+p <- emapplot(edo,showCategory=8)
+p <- p + scale_fill_gradient2(name='p-adjust',low='blue',mid='blue', high='white')
+
+# Nice visualisation but the fill gradient is highly misleading...
+
+p <- mutate(ego_mf, qscore = -log(p.adjust, base=10)) %>% 
+    dotplot(x="qscore")
+p <- p + scale_color_gradient2(name='p-adjust',low='blue',mid='blue', high='blue')
+p <- p+xlab('-log10(adjusted-p)')
+p <- p + guides(colour = "none")
+p <- p+ggtitle('Molecular function')
+p <- p+theme(plot.title = element_text(hjust = 0.5, face='bold'))
+p <- p+theme(axis.text.y = element_text(size=8.5))
+ggsave(file='HS_Y_desert_MF.pdf', plot=p, width=4.5, height=3.5)
+
+p1 <- p
+
+```
+
+# Visualisation (human biological process)
+
+```{r}
+
+# https://yulab-smu.top/biomedical-knowledge-mining-book/enrichplot.html
+
+library(clusterProfiler)
+library(enrichplot)
+library(ggupset)
+library(viridis)
+library(viridisLite)
+library(circlize)
+
+edo <- pairwise_termsim(ego_bp)
+emapplot(edo)
+p <- emapplot(edo,showCategory=8)
+p <- p + scale_fill_gradient2(name='p-adjust',low='blue',mid='blue', high='white')
+
+# Nice visualisation but the fill gradient is highly misleading...
+
+p <- mutate(ego_bp, qscore = -log(p.adjust, base=10)) %>% 
+    dotplot(x="qscore")
+p <- p + scale_color_gradient2(name='p-adjust',low='blue',mid='blue', high='blue')
+p <- p+xlab('-log10(adjusted-p)')
+p <- p + guides(colour = "none")
+p <- p+ggtitle('Biological process')
+p <- p+theme(plot.title = element_text(hjust = 0.5, face='bold'))
+p <- p+theme(axis.text.y = element_text(size=7))
+
+ggsave(file='HS_Y_desert_BP.pdf', plot=p, width=6.5, height=5.5)
+
+p2 <- p
+
+```
+
+# Cowplot
+
+```{r}
+
+library(cowplot)
+
+p3 <- plot_grid(p1,p2,nrow=1)
+
+ggsave(file='HS_Y_desert_MF_BP.pdf', plot=p3, width=10.5, height=5.2)
+
+```
