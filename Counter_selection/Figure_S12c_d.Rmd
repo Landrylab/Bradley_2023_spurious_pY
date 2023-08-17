@@ -1,0 +1,782 @@
+---
+title: "HFSP_Pelican_prep"
+author: "David Bradley"
+date: '2023-08-17'
+output: html_document
+---
+
+# In the previous scripts we wrote code to compute counter-selection against the phosphorylated tyrosine residue.
+# Here we will perform siilar analysis but instead we will calculate counter-selection against motif residues.
+# For this evolutionary analysis, it is important consider not only the motif of the phosphorylating kinase
+# but as many tyrosine kinases as possible because selection will be acting with respect to all of the kinases
+# and not just the kinases that we test in our experiments.
+
+# First step is to select all non-pY/pY that have D-3/E-3 and then retrieve the selection parameters.
+
+```{r}
+
+### load in the table
+
+setwd("~/Documents/Work/HFSP_pelican/pelican_results_analysis")
+pel_tab <- read.table('data/all_sites_pY_parameters_mss.txt', head=T)
+
+####
+
+# Exclude potential native pY sites and any spurious pY site that aligns to a human pY site 
+
+pel_tab_acc_pos <- paste(pel_tab[,1],pel_tab[,4],sep='_')
+
+## native sites
+
+native_sites <- read.table('native_all_Lanz_Leutert_union.txt')
+native_sites <- native_sites[,1]
+
+## spurious pY that align to human pY
+
+sc_py_hs_py_aligned <- read.csv('sc_pY_human_pY_aligned_4F.csv')
+sc_py_hs_py_aligned_sites <- paste(sc_py_hs_py_aligned[,1],sc_py_hs_py_aligned[,3],sep='_')
+
+# sites to exclude (native and human-aligning)
+
+exclude_sites <- unique(c(native_sites,sc_py_hs_py_aligned_sites))
+
+pel_tab <- pel_tab[!pel_tab_acc_pos %in% exclude_sites,]
+
+###
+
+# extract flanking residues of interest
+
+pel_tab_flank <- pel_tab[,7]
+Pn3 <- substr(pel_tab_flank,5,5)
+EDn3_dex <- which(Pn3 %in% c('D','E'))
+
+pel_tab_EDn3 <- pel_tab[EDn3_dex,]
+
+# N.B: I am not calculating RSA separately for each motif residue separately but instead just using the RSA derived
+### from the phosphoacceptor Y.
+
+```
+
+# Extract the Pelican parameters for each -3 D/E residue (where possible)
+
+```{r}
+
+pelican_results <- list.files('/home/david/Documents/Work/HFSP_pelican/pelican_results')
+
+count = 0
+
+missing_vec <- NULL
+
+selec_df <- NULL
+
+for (i in 1:nrow(pel_tab_EDn3)) {
+  
+  print(i)
+  
+  accession <- pel_tab_EDn3[i,1]
+  pos <- pel_tab_EDn3[i,4]
+  
+  #E/D-3
+  
+  pos <- pos-3
+  
+  rsa <- pel_tab_EDn3[i,2]
+  disorder <- pel_tab_EDn3[i,3]
+  
+  # Retrieve the Pelican results for this protein
+  
+  pel_res_dex <- which(pelican_results %in% accession)
+  
+  # Skip if we do not have any Pelican results for this protein
+  
+  if (length(pel_res_dex) == 0) {next}
+  
+  # Skip if we have results (apparently?) but no parameters).
+  
+  param_tab <- paste('/home/david/Documents/Work/HFSP_pelican/pelican_results_parameters/',accession,'_pelican_parameters.txt',sep='')
+  
+  if(length(param_tab) == 0) {count=count+1; missing_vec <- c(missing_vec,accession); next}
+  
+  param_lines <- readLines(param_tab)
+  
+  if(length(param_lines) == 0) {count=count+1; missing_vec <- c(missing_vec,accession); next}
+  
+  params <- read.table(param_tab, head=T)
+  
+  # Map the phosho position to the alignment position
+  
+  map_tab <- read.table(paste('/home/david/Documents/Work/HFSP_pelican/mapping_tables/',paste(accession,'_mapping.txt',sep=''),sep=''), head=T)
+  
+  al_pos <- map_tab[map_tab[,2] == pos,3]
+  trim_pos <- map_tab[map_tab[,2] == pos,4]
+  
+  # If we cannot locate a mapped position, then this means that the position was gappy and trimmed out by trimAL
+  
+  if (length(trim_pos) == 0) {next}
+  
+  # Alignment numbering is Python-based and so we need to account for that
+  
+  pel_pos <- trim_pos-1 
+  
+  phos_params <- params[params[,2] == pel_pos,]
+  phos_params_0 <- phos_params[which(phos_params[,7] == '0'),]
+  phos_params_1 <- phos_params[which(phos_params[,7] == '1'),]
+  
+  # Compile parameters (simply sum frequencies from all relevant residues)
+  
+  phos_params_0_Y <- phos_params_0[,colnames(phos_params_0) %in% c('D','E')]
+  phos_params_1_Y <- phos_params_1[,colnames(phos_params_1) %in% c('D','E')]  
+  phos_params_0_Y <- sum(phos_params_0_Y)
+  phos_params_1_Y <- sum(phos_params_1_Y)
+  
+  # aaqtr pvalue
+  
+  pval_tab <- read.table(paste('/home/david/Documents/Work/HFSP_pelican/pelican_results/',accession,'/',accession,'_results/','all_sites.tsv',sep=''), head=T)
+  pval_tab <- pval_tab[pval_tab[,2] == pel_pos,]
+  naa <-  pval_tab[,4]
+  multi_pval <- pval_tab[,5]
+  aaqtr_pval <- pval_tab[,6]    
+  
+  # pY or non-pY
+  
+  class <- pel_tab_EDn3[i,12]
+  
+  # Put it all together
+  
+  selec_vec <- c(accession,rsa,disorder,pos,al_pos,trim_pos,phos_params_0_Y,phos_params_1_Y,naa,multi_pval,aaqtr_pval, class)
+  
+  selec_df <- rbind(selec_df, selec_vec)
+  
+} 
+
+colnames(selec_df) <- c('accession', 'RSA','disorder','pos','al_pos', 'trim_pos', '0_DE','1_DE', 'naa','multinomial_p','aaqtr_p', 'class')
+rownames(selec_df) <- NULL
+
+selec_df_EDn3 <- selec_df
+
+```
+
+# Do FDR/BH-adjustment on the p-values and export table
+
+```{r}
+
+bh_adjust <- p.adjust(as.numeric(selec_df_EDn3[,11]),method='BH') #FDR and BH are exactly the same
+selec_df_EDn3 <- data.frame(selec_df_EDn3,bh_adjust)
+selec_df_EDn3 <- selec_df_EDn3[c(1:11,13,12)]
+
+colnames(selec_df_EDn3) <- c('accession','RSA','order','sequence','alignment','trimmed','fungi_pelican_DE','metazoa_pelican_DE','naa','multinomial_p','pelican_pvalue','pelican_padjust', 'class')
+
+selec_df_EDn3 <- selec_df_EDn3[,-c(9,10)]
+
+# Difference between metazoa and fungal parameters
+
+diff_vec <- as.numeric(selec_df_EDn3[,7]) - as.numeric(selec_df_EDn3[,8])
+
+selec_df_EDn3 <- data.frame(selec_df_EDn3[,1:8],diff_vec,selec_df_EDn3[,9:11])
+colnames(selec_df_EDn3)[9] <- 'pelican_param_Y_fungi_Y_metazoa' 
+
+```
+
+# Violin plot (D/E-3, Pelican parameters, FDR < 0.05)
+
+```{r}
+
+pt_all <- selec_df_EDn3[,c(2,9,11,12)]
+colnames(pt_all) <- c('RSA','param','signif','class')
+pt_all <- data.frame(pt_all,0)
+pt_all[pt_all[,1] < 0.2,5] <- 'buried'
+pt_all[pt_all[,1] > 0.4,5] <- 'exposed'
+pt_all[pt_all[,1] >= 0.2 & pt_all[,1] <= 0.4,5] <- 'intermediate'
+
+### 0.05
+
+pt_signif <- pt_all[pt_all[,3] < 0.05,]
+colnames(pt_signif) <- c('RSA','param','signif','phospho','buried')
+
+###
+
+sample_sizes <- table(paste(pt_signif[,4],pt_signif[,5]))
+sample_sizes <- sample_sizes[c(1,4,3,6,2,5)]
+
+###
+
+pt_signif$buried <- factor(pt_signif$buried, levels = c('buried','intermediate','exposed'))
+
+####
+
+median.quartile <- function(x){
+  out <- quantile(x, probs = c(0.25,0.5,0.75))
+  names(out) <- c("ymin","y","ymax")
+  return(out) 
+}
+
+mycol <- viridis::rocket(30)
+
+####
+
+library(ggsignif)
+
+p <- ggplot(pt_signif, aes(x=buried, y=param, fill=phospho)) + geom_violin(color='black', lwd=1.03, width=0.85, position = position_dodge(width = 0.815))
+p <- p+theme_bw()
+p <- p + theme(panel.border= element_blank())
+p <- p + stat_summary(fun.data = median.quartile, color = colors()[180], lwd=0.90, position = position_dodge(width = 0.80))
+p <- p+scale_fill_manual(values=c(mycol[12],mycol[30]))
+p <- p+xlab('')+ylab(expression(ED[fungi] - ED[metazoa] ~  (pi[Pelican])))+ggtitle('E/D-3')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p+theme(axis.text=element_text(size=10.5),axis.title.x=element_text(size=11.5,face="plain"),axis.title.y=element_text(size=12.2,face="plain"),plot.title=element_text(size=12.5,face='bold'))
+p <- p+guides(fill=guide_legend(""))
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA)))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p + geom_signif(y_position = c(1.08,1.08,1.08), xmin = c(0.8,1.8,2.8), 
+              xmax = c(1.2,2.2,3.2), annotation = c("0.013","0.96","0.065"),
+              tip_length = 0.02)
+p <- p+theme(legend.position = 'none')
+p <- p + geom_text(data=data.frame(), aes(x=c(0.78,1.22,1.78,2.22,2.78,3.22), y=rep(1.23,6), label=sample_sizes), size=2.85, inherit.aes = F)
+
+ggsave(file='Supplementary_figure_10c_DE.pdf', plot=p, width=4.25, height=3.15)
+
+### geom_signif significance
+
+pt_signif <- pt_signif %>% mutate(x2 = interaction(phospho, buried))
+p <- ggplot(pt_signif, aes(x=x2, y=param, fill=phospho)) + geom_violin(color='black', lwd=1.03, width=0.85, position = position_dodge(width = 0.815))
+p <- p+theme_bw()
+p <- p + theme(panel.border= element_blank())
+p <- p + stat_summary(fun.data = median.quartile, color = colors()[180], lwd=0.90, position = position_dodge(width = 0.80))
+p <- p+scale_fill_manual(values=c(mycol[30],mycol[12]))
+p <- p+xlab('')+ylab(expression(Y[fungi] - Y[metazoa] ~  (pi[Pelican])))
+p <- p+theme(axis.text=element_text(size=11.5),axis.title.x=element_text(size=11.5,face="plain"),axis.title.y=element_text(size=15.2,face="plain"),plot.title=element_text(size=12,face='bold'))
+p <- p+guides(fill=guide_legend(""))
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA)))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p + geom_signif(comparisons = list(c('non_pY.buried','pY.buried'),
+                                        c('non_pY.intermediate','pY.intermediate'),
+                                        c('non_pY.exposed','pY.exposed')),test='ks.test',test.args=list(alternative = "two.sided"))
+
+```
+
+# As before but this time for motif position I/L/V-1
+
+```{r}
+
+pel_tab_flank <- pel_tab[,7]
+Pn1 <- substr(pel_tab_flank,7,7)
+ILVn1_dex <- which(Pn1 %in% c('I','L','V'))
+
+pel_tab_ILVn1 <- pel_tab[ILVn1_dex,]
+
+# N.B: I am not calculating RSA separately for each motif residue separately but instead just using the RSA derived
+### from the phosphoacceptor Y.
+```
+
+# Extract the parameter values where possible
+
+```{r}
+
+pelican_results <- list.files('/home/david/Documents/Work/HFSP_pelican/pelican_results')
+
+count = 0
+
+missing_vec <- NULL
+
+selec_df <- NULL
+
+for (i in 1:nrow(pel_tab_ILVn1)) {
+  
+  print(i)
+  
+  accession <- pel_tab_ILVn1[i,1]
+  pos <- pel_tab_ILVn1[i,4]
+  
+  #E/D-3
+  
+  pos <- pos-1
+  
+  rsa <- pel_tab_ILVn1[i,2]
+  disorder <- pel_tab_ILVn1[i,3]
+  
+  # Retrieve the Pelican results for this protein
+  
+  pel_res_dex <- which(pelican_results %in% accession)
+  
+  # Skip if we do not have any Pelican results for this protein
+  
+  if (length(pel_res_dex) == 0) {next}
+  
+  # Skip if we have results (apparently?) but no parameters).
+  
+  param_tab <- paste('/home/david/Documents/Work/HFSP_pelican/pelican_results_parameters/',accession,'_pelican_parameters.txt',sep='')
+  
+  if(length(param_tab) == 0) {count=count+1; missing_vec <- c(missing_vec,accession); next}
+  
+  param_lines <- readLines(param_tab)
+  
+  if(length(param_lines) == 0) {count=count+1; missing_vec <- c(missing_vec,accession); next}
+  
+  params <- read.table(param_tab, head=T)
+  
+  # Map the phosho position to the alignment position
+  
+  map_tab <- read.table(paste('/home/david/Documents/Work/HFSP_pelican/mapping_tables/',paste(accession,'_mapping.txt',sep=''),sep=''), head=T)
+  
+  al_pos <- map_tab[map_tab[,2] == pos,3]
+  trim_pos <- map_tab[map_tab[,2] == pos,4]
+  
+  # If we cannot locate a mapped position, then this means that the position was gappy and trimmed out by trimAL
+  
+  if (length(trim_pos) == 0) {next}
+  
+  # Alignment numbering is Python-based and so we need to account for that
+  
+  pel_pos <- trim_pos-1 
+  
+  phos_params <- params[params[,2] == pel_pos,]
+  phos_params_0 <- phos_params[which(phos_params[,7] == '0'),]
+  phos_params_1 <- phos_params[which(phos_params[,7] == '1'),]
+  
+  # Compile parameters (simply sum frequencies from all relevant residues)
+  
+  phos_params_0_Y <- phos_params_0[,colnames(phos_params_0) %in% c('I','L','V')]
+  phos_params_1_Y <- phos_params_1[,colnames(phos_params_1) %in% c('I','L','V')]  
+  phos_params_0_Y <- sum(phos_params_0_Y)
+  phos_params_1_Y <- sum(phos_params_1_Y)
+  
+  # aaqtr pvalue
+  
+  pval_tab <- read.table(paste('/home/david/Documents/Work/HFSP_pelican/pelican_results/',accession,'/',accession,'_results/','all_sites.tsv',sep=''), head=T)
+  pval_tab <- pval_tab[pval_tab[,2] == pel_pos,]
+  naa <-  pval_tab[,4]
+  multi_pval <- pval_tab[,5]
+  aaqtr_pval <- pval_tab[,6]    
+  
+  # pY or non-pY
+  
+  class <- pel_tab_ILVn1[i,12]
+  
+  # Put it all together
+  
+  selec_vec <- c(accession,rsa,disorder,pos,al_pos,trim_pos,phos_params_0_Y,phos_params_1_Y,naa,multi_pval,aaqtr_pval, class)
+  
+  selec_df <- rbind(selec_df, selec_vec)
+  
+} 
+
+colnames(selec_df) <- c('accession', 'RSA','disorder','pos','al_pos', 'trim_pos', '0_ILV','1_ILV', 'naa','multinomial_p','aaqtr_p', 'class')
+rownames(selec_df) <- NULL
+
+selec_df_ILVn1 <- selec_df
+
+```
+
+# Do FDR/BH-adjustment on the p-values and export table
+
+```{r}
+
+bh_adjust <- p.adjust(as.numeric(selec_df_ILVn1[,11]),method='BH') #FDR and BH are exactly the same
+selec_df_ILVn1 <- data.frame(selec_df_ILVn1,bh_adjust)
+selec_df_ILVn1 <- selec_df_ILVn1[c(1:11,13,12)]
+
+colnames(selec_df_ILVn1) <- c('accession','RSA','order','sequence','alignment','trimmed','fungi_pelican_DE','metazoa_pelican_DE','naa','multinomial_p','pelican_pvalue','pelican_padjust', 'class')
+
+selec_df_ILVn1 <- selec_df_ILVn1[,-c(9,10)]
+
+# Difference between metazoa and fungal parameters
+
+diff_vec <- as.numeric(selec_df_ILVn1[,7]) - as.numeric(selec_df_ILVn1[,8])
+
+selec_df_EDn3 <- data.frame(selec_df_ILVn1[,1:8],diff_vec,selec_df_ILVn1[,9:11])
+colnames(selec_df_ILVn1)[9] <- 'pelican_param_Y_fungi_Y_metazoa' 
+
+#write.table(selec_df_ILVn1,file='all_sites_ILVn1_parameters.txt',quote=F,row.names=F)
+
+```
+
+# Violin plot (ILVn-1, Pelican parameters, FDR < 0.05)
+
+```{r}
+
+pt_all <- selec_df_EDn3[,c(2,9,11,12)]
+colnames(pt_all) <- c('RSA','param','signif','class')
+pt_all <- data.frame(pt_all,0)
+pt_all[pt_all[,1] < 0.2,5] <- 'buried'
+pt_all[pt_all[,1] > 0.4,5] <- 'exposed'
+pt_all[pt_all[,1] >= 0.2 & pt_all[,1] <= 0.4,5] <- 'intermediate'
+
+### 0.05
+
+pt_signif <- pt_all[pt_all[,3] < 0.05,]
+colnames(pt_signif) <- c('RSA','param','signif','phospho','buried')
+
+###
+
+sample_sizes <- table(paste(pt_signif[,4],pt_signif[,5]))
+sample_sizes <- sample_sizes[c(1,4,3,6,2,5)]
+
+###
+
+## We will use ggsignif to plot the significance values. However, ggsignif does not seem to work very well when the data is grouped.
+## Therefore, far below I have constructed a df that allows me to implement ggsignif to calculate the p-values. Then, I will
+# take these p-values and then manually add them to my distributions below.
+
+pt_signif$buried <- factor(pt_signif$buried, levels = c('buried','intermediate','exposed'))
+
+####
+
+median.quartile <- function(x){
+  out <- quantile(x, probs = c(0.25,0.5,0.75))
+  names(out) <- c("ymin","y","ymax")
+  return(out) 
+}
+
+mycol <- viridis::rocket(30)
+
+####
+
+library(ggsignif)
+
+p <- ggplot(pt_signif, aes(x=buried, y=param, fill=phospho)) + geom_violin(color='black', lwd=1.03, width=0.85, position = position_dodge(width = 0.815))
+p <- p+theme_bw()
+p <- p + theme(panel.border= element_blank())
+p <- p + stat_summary(fun.data = median.quartile, color = colors()[180], lwd=0.90, position = position_dodge(width = 0.80))
+p <- p+scale_fill_manual(values=c('#00AA00','#D7F4D7'))
+p <- p+xlab('')+ylab(expression(ED[fungi] - ED[metazoa] ~  (pi[Pelican])))+ggtitle('I/L/V-1')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p+theme(axis.text=element_text(size=10.5),axis.title.x=element_text(size=11.5,face="plain"),axis.title.y=element_text(size=12.2,face="plain"),plot.title=element_text(size=12.5,face='bold'))
+p <- p+guides(fill=guide_legend(""))
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA)))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p + geom_signif(y_position = c(1.08,1.08,1.08), xmin = c(0.8,1.8,2.8), 
+              xmax = c(1.2,2.2,3.2), annotation = c("0.94","0.74","0.066"),
+              tip_length = 0.02)
+p <- p+theme(legend.position = 'none')
+p <- p + geom_text(data=data.frame(), aes(x=c(0.78,1.22,1.78,2.22,2.78,3.22), y=rep(1.23,6), label=sample_sizes), size=2.85, inherit.aes = F)
+
+ggsave(file='Supplementary_figure_10c_ILV.pdf', plot=p, width=4.25, height=3.15)
+
+### geom_signif significance
+
+pt_signif <- pt_signif %>% mutate(x2 = interaction(phospho, buried))
+p <- ggplot(pt_signif, aes(x=x2, y=param, fill=phospho)) + geom_violin(color='black', lwd=1.03, width=0.85, position = position_dodge(width = 0.815))
+p <- p+theme_bw()
+p <- p + theme(panel.border= element_blank())
+p <- p + stat_summary(fun.data = median.quartile, color = colors()[180], lwd=0.90, position = position_dodge(width = 0.80))
+p <- p+scale_fill_manual(values=c('#00AA00','#D7F4D7'))
+p <- p+xlab('')+ylab(expression(Y[fungi] - Y[metazoa] ~  (pi[Pelican])))
+p <- p+theme(axis.text=element_text(size=11.5),axis.title.x=element_text(size=11.5,face="plain"),axis.title.y=element_text(size=15.2,face="plain"),plot.title=element_text(size=12,face='bold'))
+p <- p+guides(fill=guide_legend(""))
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA)))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p + geom_signif(comparisons = list(c('non_pY.buried','pY.buried'),
+                                        c('non_pY.intermediate','pY.intermediate'),
+                                        c('non_pY.exposed','pY.exposed')),test='ks.test',test.args=list(alternative = "two.sided"))
+
+
+```
+
+# As before but this time for FPLV+3
+
+```{r}
+
+pel_tab_flank <- pel_tab[,7]
+Pp3 <- substr(pel_tab_flank,11,11)
+FPILVp3_dex <- which(Pp3 %in% c('F','P','I','L','V'))
+
+pel_tab_FPILVp3 <- pel_tab[FPILVp3_dex,]
+
+######
+
+# Extract the parameters for each -3 D/E residue (where possible)
+
+```
+
+
+# Extract the parameter values where possible
+
+```{r}
+
+pelican_results <- list.files('/home/david/Documents/Work/HFSP_pelican/pelican_results')
+
+count = 0
+
+missing_vec <- NULL
+
+selec_df <- NULL
+
+for (i in 1:nrow(pel_tab_FPILVp3)) {
+  
+  print(i)
+  
+  accession <- pel_tab_FPILVp3[i,1]
+  pos <- pel_tab_FPILVp3[i,4]
+  
+  #E/D-3
+  
+  pos <- pos+3
+  
+  rsa <- pel_tab_FPILVp3[i,2]
+  disorder <- pel_tab_FPILVp3[i,3]
+  
+  # Retrieve the Pelican results for this protein
+  
+  pel_res_dex <- which(pelican_results %in% accession)
+  
+  # Skip if we do not have any Pelican results for this protein
+  
+  if (length(pel_res_dex) == 0) {next}
+  
+  # Skip if we have results (apparently?) but no parameters).
+  
+  param_tab <- paste('/home/david/Documents/Work/HFSP_pelican/pelican_results_parameters/',accession,'_pelican_parameters.txt',sep='')
+  
+  if(length(param_tab) == 0) {count=count+1; missing_vec <- c(missing_vec,accession); next}
+  
+  param_lines <- readLines(param_tab)
+  
+  if(length(param_lines) == 0) {count=count+1; missing_vec <- c(missing_vec,accession); next}
+  
+  params <- read.table(param_tab, head=T)
+  
+  # Map the phosho position to the alignment position
+  
+  map_tab <- read.table(paste('/home/david/Documents/Work/HFSP_pelican/mapping_tables/',paste(accession,'_mapping.txt',sep=''),sep=''), head=T)
+  
+  al_pos <- map_tab[map_tab[,2] == pos,3]
+  trim_pos <- map_tab[map_tab[,2] == pos,4]
+  
+  # If we cannot locate a mapped position, then this means that the position was gappy and trimmed out by trimAL
+  
+  if (length(trim_pos) == 0) {next}
+  
+  # Alignment numbering is Python-based and so we need to account for that
+  
+  pel_pos <- trim_pos-1 
+  
+  phos_params <- params[params[,2] == pel_pos,]
+  phos_params_0 <- phos_params[which(phos_params[,7] == '0'),]
+  phos_params_1 <- phos_params[which(phos_params[,7] == '1'),]
+  
+  # Compile parameters (simply sum frequencies from all relevant residues)
+  
+  phos_params_0_Y <- phos_params_0[,colnames(phos_params_0) %in% c('F','P','I','L','V')]
+  phos_params_1_Y <- phos_params_1[,colnames(phos_params_1) %in% c('F','P','I','L','V')]  
+  phos_params_0_Y <- sum(phos_params_0_Y)
+  phos_params_1_Y <- sum(phos_params_1_Y)
+  
+  # aaqtr pvalue
+  
+  pval_tab <- read.table(paste('/home/david/Documents/Work/HFSP_pelican/pelican_results/',accession,'/',accession,'_results/','all_sites.tsv',sep=''), head=T)
+  pval_tab <- pval_tab[pval_tab[,2] == pel_pos,]
+  naa <-  pval_tab[,4]
+  multi_pval <- pval_tab[,5]
+  aaqtr_pval <- pval_tab[,6]    
+  
+  # pY or non-pY
+  
+  class <- pel_tab_FPILVp3[i,12]
+  
+  # Put it all together
+  
+  selec_vec <- c(accession,rsa,disorder,pos,al_pos,trim_pos,phos_params_0_Y,phos_params_1_Y,naa,multi_pval,aaqtr_pval, class)
+  
+  selec_df <- rbind(selec_df, selec_vec)
+  
+} 
+
+colnames(selec_df) <- c('accession', 'RSA','disorder','pos','al_pos', 'trim_pos', '0_FPILV','1_FPILV', 'naa','multinomial_p','aaqtr_p', 'class')
+rownames(selec_df) <- NULL
+
+selec_df_FPILVp3 <- selec_df
+
+```
+
+# Do FDR/BH-adjustment on the p-values and export table
+
+```{r}
+
+bh_adjust <- p.adjust(as.numeric(selec_df_FPILVp3[,11]),method='BH') #FDR and BH are exactly the same
+selec_df_FPILVp3 <- data.frame(selec_df_FPILVp3,bh_adjust)
+selec_df_FPILVp3 <- selec_df_FPILVp3[c(1:11,13,12)]
+
+colnames(selec_df_FPILVp3) <- c('accession','RSA','order','sequence','alignment','trimmed','fungi_pelican_DE','metazoa_pelican_DE','naa','multinomial_p','pelican_pvalue','pelican_padjust', 'class')
+
+selec_df_FPILVp3 <- selec_df_FPILVp3[,-c(9,10)]
+
+# Difference between metazoa and fungal parameters
+
+diff_vec <- as.numeric(selec_df_FPILVp3[,7]) - as.numeric(selec_df_FPILVp3[,8])
+
+selec_df_FPILVp3 <- data.frame(selec_df_FPILVp3[,1:8],diff_vec,selec_df_FPILVp3[,9:11])
+colnames(selec_df_FPILVp3)[9] <- 'pelican_param_Y_fungi_Y_metazoa' 
+
+```
+
+# Violin plot (P/I/L/V+3, Pelican parameters, FDR < 0.05)
+
+```{r}
+
+pt_all <- selec_df_FPILVp3[,c(2,9,11,12)]
+colnames(pt_all) <- c('RSA','param','signif','class')
+pt_all <- data.frame(pt_all,0)
+pt_all[pt_all[,1] < 0.2,5] <- 'buried'
+pt_all[pt_all[,1] > 0.4,5] <- 'exposed'
+pt_all[pt_all[,1] >= 0.2 & pt_all[,1] <= 0.4,5] <- 'intermediate'
+
+### 0.05
+
+pt_signif <- pt_all[pt_all[,3] < 0.05,]
+colnames(pt_signif) <- c('RSA','param','signif','phospho','buried')
+
+###
+
+sample_sizes <- table(paste(pt_signif[,4],pt_signif[,5]))
+sample_sizes <- sample_sizes[c(1,4,3,6,2,5)]
+
+###
+
+## We will use ggsignif to plot the significance values. However, ggsignif does not seem to work very well when the data is grouped.
+## Therefore, far below I have constructed a df that allows me to implement ggsignif to calculate the p-values. Then, I will
+# take these p-values and then manually add them to my distributions below.
+
+pt_signif$buried <- factor(pt_signif$buried, levels = c('buried','intermediate','exposed'))
+
+####
+
+median.quartile <- function(x){
+  out <- quantile(x, probs = c(0.25,0.5,0.75))
+  names(out) <- c("ymin","y","ymax")
+  return(out) 
+}
+
+mycol <- viridis::rocket(30)
+
+####
+
+library(ggsignif)
+
+p <- ggplot(pt_signif, aes(x=buried, y=param, fill=phospho)) + geom_violin(color='black', lwd=1.03, width=0.85, position = position_dodge(width = 0.815))
+p <- p+theme_bw()
+p <- p + theme(panel.border= element_blank())
+p <- p + stat_summary(fun.data = median.quartile, color = colors()[180], lwd=0.90, position = position_dodge(width = 0.80))
+p <- p <- p+scale_fill_manual(values=c('#FFCC00','#FFEEAA'))
+p <- p+xlab('')+ylab(expression(ED[fungi] - ED[metazoa] ~  (pi[Pelican])))+ggtitle('F/P/I/L/V+3')
+p <- p+theme(plot.title = element_text(hjust = 0.5))
+p <- p+theme(axis.text=element_text(size=10.5),axis.title.x=element_text(size=11.5,face="plain"),axis.title.y=element_text(size=12.2,face="plain"),plot.title=element_text(size=12.5,face='bold'))
+p <- p+guides(fill=guide_legend(""))
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA)))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p + geom_signif(y_position = c(1.08,1.08,1.08), xmin = c(0.8,1.8,2.8), 
+              xmax = c(1.2,2.2,3.2), annotation = c("0.86","0.15","0.54"),
+              tip_length = 0.02)
+p <- p+theme(legend.position = 'none')
+p <- p + geom_text(data=data.frame(), aes(x=c(0.78,1.22,1.78,2.22,2.78,3.22), y=rep(1.23,6), label=sample_sizes), size=2.85, inherit.aes = F)
+
+ggsave(file='Supplementary_figure_10c_FPILV.pdf', plot=p, width=4.25, height=3.15)
+
+
+### geom_signif significance
+
+pt_signif <- pt_signif %>% mutate(x2 = interaction(phospho, buried))
+p <- ggplot(pt_signif, aes(x=x2, y=param, fill=phospho)) + geom_violin(color='black', lwd=1.03, width=0.85, position = position_dodge(width = 0.815))
+p <- p+theme_bw()
+p <- p + theme(panel.border= element_blank())
+p <- p + stat_summary(fun.data = median.quartile, color = colors()[180], lwd=0.90, position = position_dodge(width = 0.80))
+p <- p+scale_fill_manual(values=c(mycol[30],mycol[12]))
+p <- p+xlab('')+ylab(expression(Y[fungi] - Y[metazoa] ~  (pi[Pelican])))
+p <- p+theme(axis.text=element_text(size=11.5),axis.title.x=element_text(size=11.5,face="plain"),axis.title.y=element_text(size=15.2,face="plain"),plot.title=element_text(size=12,face='bold'))
+p <- p+guides(fill=guide_legend(""))
+p <- p + theme(axis.ticks.x = element_line(color = c(NA, NA, NA)))
+p <- p+theme(legend.margin=margin(0,0,0,0),legend.box.margin=margin(-10,-2,-10,-10))
+p <- p + geom_signif(comparisons = list(c('non_pY.buried','pY.buried'),
+                                        c('non_pY.intermediate','pY.intermediate'),
+                                        c('non_pY.exposed','pY.exposed')),test='ks.test',test.args=list(alternative = "two.sided"))
+
+
+```
+
+# Supplementary figure 10d
+
+```{r}
+
+# Filter for significant sites
+
+pel_tab_signif <- pel_tab[pel_tab[,11] < 0.05,]
+
+# Parameter distribution for all significant sites
+
+quantile(pel_tab_signif[,9],probs=seq(0,1,0.01)) #0.8 seems to mark the 95% percentile mark
+
+# Significant pY
+
+pel_tab_signif_pY <- pel_tab_signif[pel_tab_signif[,12] == 'pY',]
+
+# Retrieve the top-ranked counter-selected residues
+
+# strongly counter-selected sites 
+pel_tab_top_rank <- pel_tab_signif_pY[which(pel_tab_signif_pY[,9] > 0.5),] # pi_Fungi - pi_Metazoa is greater than 0.5
+pel_tab_top_rank_flank_05 <- pel_tab_top_rank[,7]
+
+# weakly counter-selected sites 
+pel_tab_top_rank <- pel_tab_signif_pY[which(pel_tab_signif_pY[,9] > 0.0 & pel_tab_signif_pY[,9] < 0.25),] # pi_Fungi - pi_Metazoa is greater than 0 but less than 0.25
+pel_tab_top_rank_flank_01 <- pel_tab_top_rank[,7]
+
+# -3
+
+n3_05_tab <- table(substr(pel_tab_top_rank_flank_05,5,5))/sum(table(substr(pel_tab_top_rank_flank_05,5,5))) 
+n3_01_tab <- table(substr(pel_tab_top_rank_flank_01,5,5))/sum(table(substr(pel_tab_top_rank_flank_01,5,5)))
+
+DE_n3_05 <- sum(n3_05_tab[names(n3_05_tab) %in% c('D','E')])
+DE_n3_01 <- sum(n3_01_tab[names(n3_01_tab) %in% c('D','E')])
+
+# -1
+
+n1_05_tab <- table(substr(pel_tab_top_rank_flank_05,7,7))/sum(table(substr(pel_tab_top_rank_flank_05,7,7))) 
+n1_01_tab <- table(substr(pel_tab_top_rank_flank_01,7,7))/sum(table(substr(pel_tab_top_rank_flank_01,7,7)))
+
+ILV_n1_05 <- sum(n1_05_tab[names(n1_05_tab) %in% c('I','L','V')])
+ILV_n1_01 <- sum(n1_01_tab[names(n1_01_tab) %in% c('I','L','V')])
+
+# +3
+
+p3_05_tab <- table(substr(pel_tab_top_rank_flank_05,11,11))/sum(table(substr(pel_tab_top_rank_flank_05,11,11))) 
+p3_01_tab <- table(substr(pel_tab_top_rank_flank_01,11,11))/sum(table(substr(pel_tab_top_rank_flank_01,11,11)))
+
+FPILV_p3_05 <- sum(p3_05_tab[names(p3_05_tab) %in% c('F','P','I','L','V')])
+FPILV_p3_01 <- sum(p3_01_tab[names(p3_01_tab) %in% c('F','P','I','L','V')])
+
+# Conclusion: no difference in motifs when comparing between strongly and weakly counter-selected Y sites
+
+```
+
+# Make GGplots of the data
+
+```{r}
+
+library(ggplot2)
+
+col1 <- c('D/E-3','I/L/V-1','F/P/I/L/V+3')
+col2 <- c(DE_n3_01,ILV_n1_01,FPILV_p3_01)*100
+col3 <- c('0.0 < x < 0.25','0.0 < x < 0.25','0.0 < x < 0.25')
+
+df1 <- data.frame(col1,col2,col3)
+
+col1 <- c('D/E-3','I/L/V-1','F/P/I/L/V+3')
+col2 <- c(DE_n3_05,ILV_n1_05,FPILV_p3_05)*100
+col3 <- c('x > 0.5', 'x > 0.5', 'x > 0.5')
+df2 <- data.frame(col1,col2,col3)
+
+df <- rbind(df1,df2)
+
+df$col1 <- factor(df$col1, levels = c('D/E-3','I/L/V-1','F/P/I/L/V+3'))
+
+##
+
+p <- ggplot(df, aes(x=col1,y=col2,fill=col1))+geom_bar(stat='identity', width=0.5)
+p <- p+theme_bw()
+p <- p + facet_wrap(vars(col3))
+p <- p+ coord_cartesian(ylim = c(0, 50))
+p <- p+xlab('')+ylab('% frequency')
+p <- p+theme(legend.position="none")
+p <- p+scale_fill_manual(values=c(mycol[12],'#00AA00','#FFCC00'))
+
+ggsave(file='/home/david/Documents/Work/Bradley_et_al_2023/Counter_selection_figure/github_files/Supplementary_figure_10d.pdf', plot=p, width=4.6, height=2.6)
+
+```

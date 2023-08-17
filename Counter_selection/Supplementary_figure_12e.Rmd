@@ -1,0 +1,149 @@
+---
+title: "Supplementary figure 1oe"
+author: "David Bradley"
+date: '2023-08-17'
+output: html_document
+---
+
+```{r}
+
+pel_tab <- read.table('all_sites_pY_parameters_mss.txt', head=T)
+
+# Exclude potential native pY sites and any spurious pY site that aligns to a human pY site 
+
+pel_tab_acc_pos <- paste(pel_tab[,1],pel_tab[,4],sep='_')
+
+## native sites
+
+native_sites <- read.table('native_all_Lanz_Leutert_union.txt')
+native_sites <- native_sites[,1]
+
+## spurious pY that align to human pY
+
+sc_py_hs_py_aligned <- read.csv('sc_pY_human_pY_aligned_4F.csv')
+sc_py_hs_py_aligned_sites <- paste(sc_py_hs_py_aligned[,1],sc_py_hs_py_aligned[,3],sep='_')
+
+# sites to exclude (native and human-aligning)
+
+exclude_sites <- unique(c(native_sites,sc_py_hs_py_aligned_sites))
+
+pel_tab <- pel_tab[!pel_tab_acc_pos %in% exclude_sites,]
+
+```
+
+# The objective of this script is to see how the Pelican counter-selection metrics relate to the phosphosite 'substrate quality'
+# in terms of the number of kinase that phosphorylate a particular site
+
+```{r}
+
+pel_tab_pY <- pel_tab[pel_tab[,12] == 'pY',] # Locate all phosphotyrosines with associated Pelican data
+
+# For each phosphosite find the number of upstream kinases
+
+master_files <- list.files('') #directory containing all of the 'master' files for each kinase
+
+# Do not include the S/T kinases and the (largely redundant) vSRC mutants
+
+master_files <- master_files[-c(1,24)] # The S/T kinases
+master_files <- master_files[-grep('vSRC-',master_files)] # The vSRC mutants
+
+# Iterate through the sites and take frequencies of upstream phosphorylating kinases
+
+sq_vec <- NULL
+
+for (i in 1:nrow(pel_tab_pY)) {
+  
+  print(i)
+  
+  accession <- pel_tab_pY[i,1]
+  pos <- pel_tab_pY[i,4]
+  pos <- paste('Y',pos,sep='')
+  
+  count=0
+  
+  for (j in 1:length(master_files)) {
+    
+    mas_file <- master_files[j]   
+    mas_path <- paste('/home/david/Documents/Work/HFSP_hhblits_GEMME/GEMME_master_files_weighted/',mas_file,sep='')
+    mas_tab <- read.csv(mas_path)
+    
+    mas_acc <- mas_tab[,7]
+    mas_pos <- mas_tab[,6]
+    
+    acc_dex <- which(mas_acc %in% accession)
+    pos_dex <- which(mas_pos %in% pos)
+    
+    match_dex <- intersect(acc_dex,pos_dex)
+    if(length(match_dex) > 0) {count=count+1}
+      
+  }
+  
+  sq_vec <- c(sq_vec,count)
+  
+}
+
+# The small number of sites with 0 hits are caused either by:
+# a) present in the vSRC mutants but no other kinases
+# b) processing error due to mismatch between uniprot and SGD sequence
+
+pel_tab_pY_sq <- data.frame(pel_tab_pY,sq_vec)
+
+```
+
+# Plots (ggplots)
+
+```{r}
+
+pel_tab_pY_sq_signif <- pel_tab_pY_sq[pel_tab_pY_sq[,11] < 0.05,] #Examine only sites designated as significant by Pelican
+
+a <-  pel_tab_pY_sq_signif[pel_tab_pY_sq_signif[,15] >= 1 & pel_tab_pY_sq_signif[,15] <= 2,9]
+b <- pel_tab_pY_sq_signif[pel_tab_pY_sq_signif[,15] >= 3 & pel_tab_pY_sq_signif[,15] <= 5,9]
+c <- pel_tab_pY_sq_signif[pel_tab_pY_sq_signif[,15] >= 6 & pel_tab_pY_sq_signif[,15] <= 30,9]
+
+col1 <- c(a,b,c)
+col2 <- c(rep('1-2',length(a)),rep('3-5',length(b)),rep('>5',length(c)))
+
+df <- data.frame(col1,col2)
+
+df$col2 <- factor(df$col2, levels = c('1-2','3-5','>5'))
+
+sample_sizes <- c(length(a),length(b),length(c))
+
+##
+
+median.quartile <- function(x){
+  out <- quantile(x, probs = c(0.25,0.5,0.75))
+  names(out) <- c("ymin","y","ymax")
+  return(out) 
+}
+
+p <- ggplot(df,aes(x=col2,y=col1,fill=col2))+geom_violin(lwd=0.9)
+p <- p + stat_summary(fun.data = median.quartile, color = colors()[180], lwd=0.90, position = position_dodge(width = 0.80))
+p <- p+scale_fill_manual(values=c('white','white','white'))
+p <- p+theme_bw()
+p <- p+theme(legend.position="none")
+p <- p+theme(axis.text=element_text(size=13.5),axis.title.x=element_text(size=12.5,face="plain"),axis.title.y=element_text(size=16.5,face="plain"),plot.title=element_text(size=12,face='bold'))
+p <- p+xlab('# of phosphorylating kinases')+ylab(expression(Y[fungi] - Y[metazoa] ~  (pi[Pelican])))
+p <- p + geom_signif(y_position = c(1.08), xmin = c(1), 
+              xmax = c(3.0), annotation = c("0.093"),
+              tip_length = 0.02)
+p <- p + theme(panel.border= element_blank())
+p <- p + geom_text(data=data.frame(), aes(x=c(1,2,3), y=rep(1.28,3), label=sample_sizes), size=4.85, inherit.aes = F)
+
+ggsave(file='Supplementary_figure_10e.pdf', plot=p, width=6.5, height=3.65)
+
+####
+
+### code to calculate significance
+
+p <- ggplot(df,aes(x=col2,y=col1,fill=col2))+geom_violin()
+p <- p + stat_summary(fun.data = median.quartile, color = colors()[180], lwd=0.90, position = position_dodge(width = 0.80))
+p <- p+scale_fill_manual(values=c(colors()[235],colors()[235],colors()[235]))
+p <- p+theme_bw()
+p <- p+theme(legend.position="none")
+p <- p+xlab('# of phosphorylating kinases')+ylab(expression(Y[fungi] - Y[metazoa] ~  (pi[Pelican])))
+p <- p + geom_text(data=data.frame(), aes(x=c(1,2,3), y=rep(1.23,3), label=sample_sizes), size=3.65, inherit.aes = F)
+p <- p + geom_signif(comparisons = list(c('1-2','>5')),test='wilcox.test',test.args=list(alternative = "two.sided"))
+
+```
+
