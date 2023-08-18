@@ -28,12 +28,12 @@ pel_tab_acc_pos <- paste(pel_tab[,1],pel_tab[,4],sep='_')
 
 ## native sites
 
-native_sites <- read.table('native_all_Lanz_Leutert_union.txt')
+native_sites <- read.table('/home/david/Documents/Work/Bradley_et_al_2023/Native_pY/native_all_Lanz_Leutert_union.txt')
 native_sites <- native_sites[,1]
 
 ## spurious pY that align to human pY
 
-sc_py_hs_py_aligned <- read.csv('sc_pY_human_pY_aligned_4F.csv')
+sc_py_hs_py_aligned <- read.csv('/home/david/Documents/Work/Bradley_et_al_2023/Evolution_figure/github_files/sc_pY_human_pY_aligned_4F.csv')
 sc_py_hs_py_aligned_sites <- paste(sc_py_hs_py_aligned[,1],sc_py_hs_py_aligned[,3],sep='_')
 
 # sites to exclude (native and human-aligning)
@@ -252,6 +252,10 @@ p <- p + geom_signif(comparisons = list(c('non_pY.buried','pY.buried'),
                                         c('non_pY.intermediate','pY.intermediate'),
                                         c('non_pY.exposed','pY.exposed')),test='ks.test',test.args=list(alternative = "two.sided"))
 
+## save the data frame
+
+pt_signif_EDn3 <- pt_signif
+
 ```
 
 # As before but this time for motif position I/L/V-1
@@ -469,6 +473,10 @@ p <- p + geom_signif(comparisons = list(c('non_pY.buried','pY.buried'),
                                         c('non_pY.intermediate','pY.intermediate'),
                                         c('non_pY.exposed','pY.exposed')),test='ks.test',test.args=list(alternative = "two.sided"))
 
+
+## save the data frame
+
+pt_signif_ILVn1 <- pt_signif
 
 ```
 
@@ -690,6 +698,11 @@ p <- p + geom_signif(comparisons = list(c('non_pY.buried','pY.buried'),
                                         c('non_pY.exposed','pY.exposed')),test='ks.test',test.args=list(alternative = "two.sided"))
 
 
+
+## save the data frame
+
+pt_signif_FPILVp3 <- pt_signif
+
 ```
 
 # Supplementary figure 10d
@@ -780,3 +793,89 @@ p <- p+scale_fill_manual(values=c(mycol[12],'#00AA00','#FFCC00'))
 ggsave(file='/home/david/Documents/Work/Bradley_et_al_2023/Counter_selection_figure/github_files/Supplementary_figure_10d.pdf', plot=p, width=4.6, height=2.6)
 
 ```
+
+# Try to do a facet wrap ggplot instead
+
+```{r}
+
+pt_signif_EDn3 <- data.frame(pt_signif_EDn3,'D/E-3')
+colnames(pt_signif_EDn3) <- c(colnames(pt_signif_EDn3)[1:5],'class')
+
+pt_signif_ILVn1 <- data.frame(pt_signif_ILVn1,'I/L/V-1')
+colnames(pt_signif_ILVn1) <- c(colnames(pt_signif_ILVn1)[1:5],'class')
+
+pt_signif_FPILVp3 <- data.frame(pt_signif_FPILVp3,'F/P/I/L/V+3')
+colnames(pt_signif_FPILVp3) <- c(colnames(pt_signif_FPILVp3)[1:5],'class')
+
+pt_signif_all <- rbind(pt_signif_EDn3, pt_signif_ILVn1, pt_signif_FPILVp3)
+pt_signif_all$class <- factor(pt_signif_all$class, levels = c('D/E-3','I/L/V-1','F/P/I/L/V+3'))
+
+## ggplot
+
+mycol <- viridis::rocket(30) #colors
+
+
+annotation_df_1 <- data.frame(
+       class = rep(c('D/E-3'),3),
+       start = c(0.8,1.8,2.8),
+       end = c(1.2,2.2,3.2),
+       y = c(1.08,1.08,1.08),
+       label = c('0.013','0.96','0.065'),
+       phospho_class = rep(c('non_pY.D/E-3','pY.D/E-3'),3)
+)
+
+annotation_df_2 <- data.frame(
+       class = rep(c('I/L/V-1'),3),
+       start = c(0.8,1.8,2.8),
+       end = c(1.2,2.2,3.2),
+       y = c(1.08,1.08,1.08),
+       label = c('0.94','0.74','0.066'),
+       phospho_class = rep(c('non_pY.I/L/V-1','pY.I/L/V-1'),3)
+)
+
+
+annotation_df_3 <- data.frame(
+       class = rep(c('F/P/I/L/V+3'),3),
+       start = c(0.8,1.8,2.8),
+       end = c(1.2,2.2,3.2),
+       y = c(1.08,1.08,1.08),
+       label = c('0.86','0.15','0.54'),
+       phospho_class = rep(c('non_pY.F/P/I/L/V+3','pY.F/P/I/L/V+3'),3)
+)
+
+pt_signif_all <- pt_signif_all %>% mutate(phospho_class = paste(phospho, class, sep = "."))
+
+p <- ggplot(pt_signif_all, aes(x=buried, y=param, fill=phospho_class)) + geom_violin(color='black', lwd=1.03, width=0.81, position = position_dodge(width = 0.815))
+p <- p+geom_signif(data = annotation_df_1,aes(xmin = start, xmax = end, annotations = label, y_position = y), textsize = 3, vjust = -0.2, manual = TRUE)
+p <- p+geom_signif(data = annotation_df_2,aes(xmin = start, xmax = end, annotations = label, y_position = y), textsize = 3, vjust = -0.2, manual = TRUE)
+p <- p+geom_signif(data = annotation_df_3,aes(xmin = start, xmax = end, annotations = label, y_position = y), textsize = 3, vjust = -0.2, manual = TRUE)
+p <- p + facet_wrap(~factor(class, c('D/E-3','I/L/V-1','F/P/I/L/V+3')))
+p <- p <- p+scale_fill_manual(values=c(mycol[12],'#FFCC00','#00AA00',mycol[30],'#FFEEAA','#D7F4D7'))
+p <- p+theme_bw()
+p <- p + theme(panel.border= element_blank())
+p <- p+theme(legend.position = 'none')
+p <- p + stat_summary(fun.data = median.quartile, color = colors()[180], lwd=0.90, position = position_dodge(width = 0.80))
+p <- p+xlab('')+ylab(expression(AAs[fungi] - AAs[metazoa] ~  (pi[Pelican])))+ggtitle('')
+p <- p+theme(axis.text=element_text(size=12.0))
+ 
+## Add the sample sizes individually for each facet
+
+sample_sizes_EDn3 <- table(paste(pt_signif_EDn3[,4],pt_signif_EDn3[,5]))
+sample_sizes_EDn3 <- sample_sizes_EDn3[c(1,4,3,6,2,5)]
+
+sample_sizes_ILVn1 <- table(paste(pt_signif_ILVn1[,4],pt_signif_ILVn1[,5]))
+sample_sizes_ILVn1 <- sample_sizes_ILVn1[c(1,4,3,6,2,5)]
+  
+sample_sizes_FPILVp3 <- table(paste(pt_signif_FPILVp3[,4],pt_signif_FPILVp3[,5]))
+sample_sizes_FPILVp3 <- sample_sizes_FPILVp3[c(1,4,3,6,2,5)]
+
+p <- p + geom_text(data=data.frame(class = rep(c('D/E-3'),6)), aes(x=c(0.78,1.22,1.78,2.22,2.78,3.22), y=rep(1.23,6), label=sample_sizes_EDn3), size=2.85, inherit.aes = F)
+p <- p + geom_text(data=data.frame(class = rep(c('I/L/V-1'),6)), aes(x=c(0.78,1.22,1.78,2.22,2.78,3.22), y=rep(1.23,6), label=sample_sizes_ILVn1), size=2.85, inherit.aes = F)
+p <- p + geom_text(data=data.frame(class = rep(c('F/P/I/L/V+3'),6)), aes(x=c(0.78,1.22,1.78,2.22,2.78,3.22), y=rep(1.23,6), label=sample_sizes_FPILVp3), size=2.85, inherit.aes = F)
+
+# save tp file
+
+ggsave(file='Supplementary_figure_12c_multifaceted.pdf', plot=p, width=12.25, height=3.45)
+
+```
+
