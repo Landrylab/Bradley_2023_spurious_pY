@@ -1,6 +1,6 @@
 # Bradley_2023_spurious_pY
 
-Scripts for the paper on spurious tyrosine phosphorylation in yeast (Bradley et al., 2023). The repository is divided into the following
+Scripts for the paper on spurious tyrosine phosphorylation in yeast (Bradley et al., 2023). All of the code is written in R in the R markdown (.Rmd) format. The repository is divided into the following
 four directories:
 
 * Structure: Figure 2 and associated analyses
@@ -9,3 +9,4 @@ four directories:
 * Counter_selection: Figure 5 and associated analyses (whether spurious pY sites are counter-selected in species that have tyrosine kinases)
 
 Scripts for the Figure 1 analysis (MS/MS data analysis) are publicly available under: https://gitlab.com/public_villenlab/spurious-phosphorylation
+
