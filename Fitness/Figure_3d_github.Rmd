@@ -1,7 +1,7 @@
 ---
 title: "Figure_3d_github"
 author: "David Bradley"
-date: '2023-07-13'
+date: '2023-10-02'
 output: html_document
 ---
 
@@ -37,25 +37,27 @@ Y_kinase_sorted <- Y_kinase_sorted[,1]
 
 library(dplyr)
 
-### Load in the data for the selection coefficients
+### Load in the data for the relative frequencies extracted from the competition assays
 
-sel_coef <- read.table('selection_coefficients.tsv')
+rel_freq <- read.csv('relative_frequencies.csv')
+rel_freq <- rel_freq[,-1] # remove extraneous column
 
-# remove dead and uninduced kinases
+# remove dead and uninduced kinases, and include relative frequencies only for the last time point only
 
-sel_coef <- sel_coef[sel_coef[,2] != 'dead',]
-sel_coef <- sel_coef[sel_coef[,4] != 'uninduced',]
+rel_freq <- rel_freq[rel_freq[,2] != 'dead',]
+rel_freq <- rel_freq[rel_freq[,4] != 'uninduced',]
+rel_freq <- rel_freq[rel_freq[,4] == 72,] # 72h is the last time point
 
 # extract unique IDs for each kinase and then reformat the dataframe
 
-kinase_id <- paste(sel_coef[,1],sel_coef[,2],sep='_')
-sel_coef[,1] <- kinase_id
-sel_coef <- sel_coef[,-2]
-colnames(sel_coef) <- c('Kinase','Replicate','Induction','selection_coefficient')
+kinase_id <- paste(rel_freq[,1],rel_freq[,2],sep='_')
+rel_freq[,1] <- kinase_id
+rel_freq <- rel_freq[,-2]
+colnames(rel_freq) <- c('Kinase','Replicate','Time','Induction','relative_frequency')
 
 # take mean with respect to each unique kinase
 
-kin_sf <- sel_coef %>% group_by(Kinase) %>% summarise(mean = mean(selection_coefficient), n = n())
+kin_sf <- rel_freq %>% group_by(Kinase) %>% summarise(mean = mean(relative_frequency), n = n())
 
 ```
 
@@ -95,7 +97,7 @@ names(min_growth_vec) <- Y_kinase
 
 ```
 
-# Compare the selection coefficients (from the competition assay) with the WT-dead AUCs (from the fitness screens)
+# Compare the relative frequencies (from the competition assay - 72h) with the WT-dead AUCs (from the fitness screens)
 
 ```{r}
 
@@ -109,13 +111,14 @@ sc_kin_id_2 <- rapply(strsplit(sc_kin_id,split='_'), function(x) x[2])
 sc_kin_id_new <- c(sc_kin_id_1[sc_kin_id_2=='wt'],sc_kin_id_2[sc_kin_id_2 !='wt'])
 
 # Manually move one element (vSRC) to retain original order
+
 sc_kin_id_new <- c(sc_kin_id_new,'vSRC')
 sc_kin_id_new <- sc_kin_id_new[-13]
 
 # numerical variables
 
 sc_data <- as.data.frame(kin_sf)[,2]
-auc_data <- min_growth_vec[match(sc_kin_id_new,auc_kin_id)]
+auc_data <- min_growth_vec[match(sc_kin_id_new,auc_kin_id)] # Match the corresponding IDs
 
 #
 
@@ -130,7 +133,7 @@ fitness_df <- data.frame(auc_data,sc_data)
 library(ggrepel)
 library(ggtext)
 
-# Mini df for kinases that I would like to highlight
+# Mini df for kinases that I would like to highlight using ggrepel
 
 fitness_df_mini <- fitness_df[rownames(fitness_df) %in% c('ABL1','ABL2','FRK','FYN','LCK','SRC','L451A','L317A','vSRC','V383A','L452A','V394A'),]
 fitness_labels <- rownames(fitness_df_mini)
@@ -138,15 +141,14 @@ fitness_labels <- rownames(fitness_df_mini)
 ## As before but this time we have only one inactive kinase and one vSRC sequene
 
 p <- ggplot(fitness_df, aes(x=auc_data, y=sc_data)) + geom_point() + geom_smooth(method=lm, se=FALSE,col='black')
-#p <- p+geom_label_repel(aes(label = rownames(reg_df)), size=2.9, color='black', label.size=0.3, label.r=0.15)
 p <- p+geom_label_repel(data=fitness_df_mini,aes(label = fitness_labels))#, size=2.9, color='black', label.size=0.25, label.r=0.15)
-p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_rect(color="black", size=1.2, linetype="solid"))+theme(legend.position="none")
+p <- p+theme_bw() + theme(text=element_text(family="Ubuntu Light", face="plain", size=15), panel.border = element_blank())+theme(legend.position="none")
 p <- p+theme(axis.text=element_text(size=11),axis.title.x=element_text(size=13,face="bold"),axis.title.y=element_text(size=13,face="bold"),plot.title=element_text(size=18,face='bold'))
 p <- p+theme(legend.position="none")
-p <- p + ylab("selection coefficient (s)") + xlab("minimum fitness (wt-dead)") + ggtitle('')
-p <- p+geom_richtext(x=-5.7, y=-0.00155, label='r<sub>s</sub> = 0.65',size=4.5,fontface='plain',col='black',label.color = NA)
+p <- p + ylab("relative frequency (log scale)") + xlab("minimum fitness (wt-dead)") + ggtitle('')
+p <- p+geom_richtext(x=-5.4, y=-0.2, label='r<sub>s</sub> = 0.70',size=4.5,fontface='plain',col='black',label.color = NA)
 
-ggsave(file='selection_coefficient_vs_minimum_fitness_unique_figure.pdf', plot=p, width=4.35, height=3.65)
+ggsave(file='rel_freq_72h_vs_minimum_fitness_unique_figure.pdf', plot=p, width=4.5, height=3.9)
 
 ```
 
