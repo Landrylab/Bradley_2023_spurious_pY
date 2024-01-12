@@ -1,9 +1,9 @@
-Label Feature
-ordered 83.3961316252198
-pfam_domain 53.5292640040191
-buried 35.0916855061542
-destabilising_(intra) 19.8944988696307
-interface 13.0118060788747
-destabilising_(inter) 2.16026124089425
-1D_proximal 11.22137
-3D_proximal 3.587786
+ordered 83.4351145038168
+pfam domain 53.3333333333333
+buried 35.1399491094148
+destabilising (intra) 19.8727735368957
+interface 12.9007633587786
+destabilising (inter) 2.13740458015267
+cross-talk (1D) 11.4249363867684
+cross-talk (3D) 3.58778625954198
+SLiM (predicted) 5.24173027989822
