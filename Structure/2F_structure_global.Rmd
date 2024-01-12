@@ -20,32 +20,15 @@ fonts()
 
 ```{r}
 
-master_files <- list.files('') # List all files in a directory that contains the master file for each kinase
-master_files <- master_files[grep('3D_linear',master_files)]
-master_files <- master_files[-c(1,24)] # Remove master files for the two active pS/pT kinases 
+# Read in fine containing each unique spurious pY sites
 
-first_master <- read.csv(master_files[1])
+master_file_global <- read.csv('/master_file_unique_new_native.csv')[,c(-1,-2)]
 
-# Collect together all unique pY phosphosites from across all of the expressed kinases in this experiment
+# Unique global file, remove native sites, remove sites that do not map to an AF2 model
 
-master_master_file <- NULL
+master_file_global_unique <- master_file_global[!duplicated(master_file_global[,c(5,6)]),] 
 
-for (i in 1:length(master_files)) {
-  
-  master_file <- read.csv(master_files[i])
-  colnames(master_file) <- colnames(first_master)
-  master_master_file <- rbind(master_master_file, master_file)
-  
-}
-
-master_file_global <- master_master_file
-
-# Unique global file
-
-master_file_global_unique <- master_file_global[!duplicated(master_file_global[,c(5,6)]),]
-
-# Remove sites that do not map to an AF2 model
-master_file_AF2_all <- master_file_global_unique[master_file_global_unique[,14] != 'no AF2',]
+master_file_AF2_all <- filter(master_file_global_unique, Native == 'No') %>% filter(ddG_intra != 'no AF2')
 
 ```
 
@@ -53,23 +36,95 @@ master_file_AF2_all <- master_file_global_unique[master_file_global_unique[,14] 
 
 ```{r}
 
-ordered <- unname(table(master_file_AF2_all[,13])[2]/sum(table(master_file_AF2_all[,13])))
+ordered <- unname(table(master_file_AF2_all$order.)[2]/sum(table(master_file_AF2_all$order.)))
 
-pfam <- length(which(master_file_AF2_all[21] != 'No domain'))/nrow(master_file_AF2_all)
+pfam <- length(which(master_file_AF2_all$pfam_domain != 'No domain'))/nrow(master_file_AF2_all)
 
-buried <- length(which(as.numeric(master_file_AF2_all[,10]) < 0.2))/nrow(master_file_AF2_all)
+buried <- length(which(as.numeric(master_file_AF2_all$RSA) < 0.2))/nrow(master_file_AF2_all)
 
-destabilising <- length(which(as.numeric(master_file_AF2_all[,14]) > 2))/nrow(master_file_AF2_all)
+destabilising <- length(which(as.numeric(proximal_1D$ddG_intra) > 2))/nrow(master_file_AF2_all)
 
-interface <- table(master_file_AF2_all[,22])[2]/sum(table(master_file_AF2_all[,22]))
+interface <- table(master_file_AF2_all$interactions.)[2]/sum(table(master_file_AF2_all$interactions.))
 
-destabilising_int <- master_file_AF2_all[,c(29,33)]
+destabilising_int <- master_file_AF2_all[,c(25,29)] #I3D and AF2 ddG max columns
+destabilising_int <- length(which(as.numeric(unlist(apply(destabilising_int,1,function(x) x[x!='na']))) > 2)) / nrow(master_file_AF2_all) # Which have ddG > 2 for either AF2 or I3D
 
-destabilising_int <- length(which(as.numeric(unlist(apply(destabilising_int,1,function(x) x[x!='na']))) > 2)) / nrow(master_file_AF2_all)
+#3D distance
+three_d_df <- read.table('crosstalk_DF_final.txt',head=T)
+min_dist <- rapply(strsplit(three_d_df[,6],split=' '), function(x) min(as.numeric(x)))
+proximal_3D <- length(which(min_dist < 8))/nrow(master_file_AF2_all)
 
-master_file_AF2_spurious <- master_file_AF2_all[master_file_AF2_all[,9] == 'No',]
-proximal_1D <- length(which(master_file_AF2_spurious[,18] > 0)) / nrow(master_file_AF2_spurious)
-proximal_3D <- length(which(master_file_AF2_spurious[,17] < 8)) / nrow(master_file_AF2_spurious)
+# percentage of spurious pY that map to a SLIM
+
+slim_match <- (which(master_file_AF2_all$ELM_regex_matches != 'NA') %>% length()) / nrow(master_file_AF2_all)
+
+```
+
+# Calculation of 1D proximity percentages
+
+```{r}
+
+# Prepare the pSpT data from Leutert et al., 2022
+
+library(gdata)
+library(readxl)
+library(clusterProfiler)
+
+# Load in the ultra-deep reference pS/pT phosphoproteome from Leutert et al., 2022 (Table S2) 
+
+leutert_S2 <- read_xlsx('Table_S2.xlsx', skip=0, col_names=TRUE, sheet=2)
+leutert_S2 <- as.data.frame(leutert_S2)
+
+# S and T sites only
+
+leutert_S2 <- leutert_S2[leutert_S2[,5] %in% c('S','T'),]
+
+# Retain useful columns only
+
+leutert_S2 <- leutert_S2[,c(2,5,6)]
+
+# We need to convert the systematic IDs into uniProt IDs
+
+library(org.Sc.sgd.db)
+keytypes(org.Sc.sgd.db)
+ensembl_uniprot <- bitr(leutert_S2[,1], fromType="ENSEMBL", toType=c("UNIPROT"), OrgDb="org.Sc.sgd.db")
+uniprot_map <- ensembl_uniprot[match(leutert_S2[,1],ensembl_uniprot[,1]),2]
+
+leutert_S2_uniprot <- cbind(leutert_S2[,1],uniprot_map,leutert_S2[,c(2,3)])
+colnames(leutert_S2_uniprot)[1] <- 'systematic_id'
+
+# vectors for uniprot and ensembl accessios
+
+leutert_ensembl <- leutert_S2_uniprot[,1]
+leutert_uniprot <- leutert_S2_uniprot[,2]
+
+# Search every pY site for pS/pT sites that are proximal
+
+master_csv <- master_file_AF2_all
+cophos_prox_vec <- NULL
+cophos_prox_len_vec <- NULL
+  
+for (j in 1:nrow(master_csv)) {
+  
+    spurious_uniprot <- master_csv[j,5]
+    spurious_pos <- readr::parse_number(master_csv[j,7])
+    
+    # Match to Lanz
+    # Find native sites within 4 amino acids
+    
+    cophos <- leutert_S2_uniprot[leutert_S2_uniprot[,2] %in% spurious_uniprot,]
+    cophos_pos <- cophos[,4]
+    cophos_pos_prox <- cophos_pos[which(abs(spurious_pos - cophos_pos) <= 4)]
+    cophos_prox_len_vec <- c(cophos_prox_len_vec, length(cophos_pos_prox))
+    
+    if (length(cophos_pos_prox) == 0) {cophos_pos_prox <- NA}
+    
+    cophos_pos_prox <- paste(cophos_pos_prox,collapse=' ')
+    cophos_prox_vec <- c(cophos_prox_vec, cophos_pos_prox)
+    
+  }
+  
+proximal_1D <- length(which(cophos_prox_len_vec > 0))/nrow(master_file_AF2_all) # 1D percentage us 11.425
 
 ```
 
@@ -77,8 +132,8 @@ proximal_3D <- length(which(master_file_AF2_spurious[,17] < 8)) / nrow(master_fi
 
 ```{r}
 
-label_vec <- c('ordered','pfam domain','buried','destabilising (intra)', 'interface', 'destabilising (inter)', 'cross-talk (1D)', 'cross-talk (3D)')
-feature_vec <- c(ordered,pfam,buried,destabilising,interface,destabilising_int,proximal_1D,proximal_3D)
+label_vec <- c('ordered','pfam domain','buried','destabilising (intra)', 'interface', 'destabilising (inter)', 'cross-talk (1D)', 'cross-talk (3D)','SLiM (predicted)')
+feature_vec <- c(ordered,pfam,buried,destabilising,interface,destabilising_int,proximal_1D,proximal_3D,slim_match)
 feature_vec <- feature_vec*100
 
 global_df <- data.frame(label_vec,feature_vec,stringsAsFactors = FALSE)
@@ -93,15 +148,13 @@ write.table(global_df,file='structural_profile_df.txt',quote=F,col.names=F,row.n
 
 # Plot a simple barplot corresponding to the global structural profile of the spurious pY data
 
-global_df <- read.table('structural_profile_df.txt')
-colnames(global_df) <- global_df[1,]
-global_df <- global_df[-1,]
 global_df[,2] <- as.numeric(global_df[,2])
-global_df[,1] <- c('ordered','pfam domain','buried','destabilising (intra)', 'interface', 'destabilising (inter)', '1D proximal', '3D proximal')
-global_df$Label<- factor(global_df$Label, levels = rev(c('ordered','pfam domain','buried','destabilising (intra)', 'interface', 'destabilising (inter)', '1D proximal', '3D proximal')))
+global_df[,1] <- c('ordered','pfam domain','buried','destabilising (intra)', 'interface', 'destabilising (inter)', '1D proximal', '3D proximal', 'SLiM (predicted)')
+global_df <- data.frame(global_df)
+global_df$Label <- factor(global_df$Label, levels = rev(c('ordered','pfam domain','buried','destabilising (intra)', 'interface', 'destabilising (inter)', '1D proximal', '3D proximal', 'SLiM (predicted)')))
 
-p <- ggplot(global_df, aes(x=Label,y=Feature, fill=Label)) + geom_bar(stat='identity',width=0.5) + scale_fill_manual(values = rep(colors()[291],8),9)
-p <- p+ scale_x_discrete(labels= rev(c('ordered','pfam domain','buried', expression(Delta*Delta*'G > 2 (intra)'), 'interface', expression(Delta*Delta*'G > 2 (inter) '), '1D proximal', '3D proximal')))
+p <- ggplot(global_df, aes(x=Label,y=Feature, fill=Label)) + geom_bar(stat='identity',width=0.5) + scale_fill_manual(values = rep(colors()[291],9))
+p <- p+ scale_x_discrete(labels= rev(c('ordered','pfam domain','buried', expression(Delta*Delta*'G > 2 (intra)'), 'interface', expression(Delta*Delta*'G > 2 (inter) '), '1D proximal', '3D proximal', 'SLiM (predicted)')))
 
 # Font
 p <- p+theme_bw()
@@ -117,7 +170,7 @@ p <- p+theme(axis.ticks.length=unit(-0.10, "cm"), axis.text.x = element_text(mar
 p <- p+theme(axis.text.x=element_text(size=9.65),axis.text.y=element_text(size=12.5),axis.title.x=element_text(size=11,face="plain"),axis.title.y=element_text(size=16,face="plain"),plot.title=element_text(size=18,face='bold'))
 p <- p+theme(plot.title = element_text(hjust = 0.5))
 
-ggsave(file='2F_structural_profile.pdf', plot=p, width=4.65, height=4.8)
+ggsave(file='2F_structural_profile.pdf', plot=p, width=4.85, height=4.8)
 
 ```
 
